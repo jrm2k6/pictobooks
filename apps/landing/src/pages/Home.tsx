@@ -459,7 +459,7 @@ export default function Home() {
                 <span className="block italic" style={{ color: "oklch(0.88 0.15 85)" }}>to Create Yours</span>
               </h2>
               <p className="text-[oklch(0.75_0.02_255)] text-lg mb-10 leading-relaxed" style={{ fontFamily: "Plus Jakarta Sans, sans-serif" }}>
-                We're putting the finishing touches on ColorBook. Join the waitlist to get early access and a special launch discount.
+                We're putting the finishing touches on Pictobook. Join the waitlist to get early access and a special launch discount.
               </p>
 
               <div className="flex justify-center">
