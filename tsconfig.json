@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "module": "ESNext",
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "jsx": "preserve",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  }
+}
