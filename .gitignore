@@ -110,3 +110,6 @@ temp/
 
 # Manus AI tool artifacts
 .manus-logs/
+
+# Claude Code local settings
+.claude/settings.local.json
