@@ -1,0 +1,19 @@
+# Local secrets/vars for Cloudflare Worker dev (`wrangler dev`).
+# Copy to `apps/functions/.dev.vars` and fill in real values.
+
+# Supabase project REST URL
+# Example: https://<project-ref>.supabase.co
+SUPABASE_URL=
+
+# Supabase service role key (secret)
+SUPABASE_SERVICE_ROLE_KEY=
+
+# Cloudflare Turnstile secret key (secret)
+TURNSTILE_SECRET=
+
+# Allowed browser origin for CORS checks
+# Example: http://localhost:3000
+ALLOWED_ORIGIN=http://localhost:3000
+
+# Salt for hashing client IP before persistence
+IP_HASH_SALT=

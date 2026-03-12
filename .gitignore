@@ -13,6 +13,11 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.development
+.env.staging
+.env.production
+apps/functions/.dev.vars
+apps/functions/.wrangler/
 
 # IDE and editor files
 .vscode/
