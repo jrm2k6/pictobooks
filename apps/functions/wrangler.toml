@@ -1,0 +1,14 @@
+name = "pictobook-functions"
+main = "src/index.ts"
+compatibility_date = "2026-03-11"
+workers_dev = true
+preview_urls = false
+
+[vars]
+ALLOWED_ORIGIN = "https://pictobook.app"
+SUPABASE_URL = "https://icvsgccslttohdbftqsm.supabase.co"
+
+[[kv_namespaces]]
+binding = "WAITLIST_RATE_LIMIT"
+id = "039714d19f324dfda231557cb804c917"
+preview_id = "902374edb1024bbca0b6ec5d4f88ca50"

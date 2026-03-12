@@ -68,3 +68,16 @@ cd apps/api && bundle exec rails console
 - Static deployment: deploy the `apps/landing/dist/` folder after `pnpm --filter landing build`. Platform TBD.
 - `apps/web/` and `apps/api/` are placeholders for future packages.
 - Path alias `@shared/*` maps to `packages/shared/src/*` in the landing app.
+
+## Environment Files
+
+- `apps/landing/.env.*` is used by Vite in the landing app. Put `VITE_*` keys here.
+- Root `.env.*` is for backend/runtime scripts (worker/dbmate), not for Vite frontend env loading.
+- Quick start for local waitlist setup:
+
+```bash
+cp apps/landing/.env.example apps/landing/.env.development
+cp .env.example .env.development
+```
+
+Then fill in both files and restart the landing dev server.

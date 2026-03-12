@@ -2,9 +2,23 @@
   "name": "pictobook",
   "private": true,
   "scripts": {
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "db:new": "dbmate --migrations-dir db/migrations new",
+    "db:up": "dbmate --migrations-dir db/migrations up",
+    "db:down": "dbmate --migrations-dir db/migrations down",
+    "db:status": "dbmate --migrations-dir db/migrations status",
+    "db:up:dev": "dbmate --env-file .env.development --migrations-dir db/migrations up",
+    "db:down:dev": "dbmate --env-file .env.development --migrations-dir db/migrations down",
+    "db:status:dev": "dbmate --env-file .env.development --migrations-dir db/migrations status",
+    "db:up:staging": "dbmate --env-file .env.staging --migrations-dir db/migrations up",
+    "db:down:staging": "dbmate --env-file .env.staging --migrations-dir db/migrations down",
+    "db:status:staging": "dbmate --env-file .env.staging --migrations-dir db/migrations status",
+    "db:up:prod": "dbmate --env-file .env.production --migrations-dir db/migrations up",
+    "db:down:prod": "dbmate --env-file .env.production --migrations-dir db/migrations down",
+    "db:status:prod": "dbmate --env-file .env.production --migrations-dir db/migrations status"
   },
   "devDependencies": {
+    "dbmate": "^2.28.0",
     "prettier": "^3.6.2",
     "typescript": "5.6.3"
   },
