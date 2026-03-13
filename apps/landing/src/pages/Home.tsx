@@ -15,10 +15,11 @@ import {
   type WaitlistSignupResponse,
 } from "@shared/waitlist";
 
-const HERO_IMAGE = "/images/hero_main.png";
-const FEATURE_UPLOAD = "/images/feature_upload.png";
-const FEATURE_BOOK = "/images/feature_book.png";
-const FEATURE_AGES = "/images/feature_ages.png";
+const HERO_IMAGE = "/images/hero_main.optimized.webp";
+const FEATURE_UPLOAD = "/images/feature_upload.optimized.webp";
+const FEATURE_BOOK = "/images/feature_book.optimized.webp";
+const FEATURE_AGES = "/images/feature_ages.optimized.webp";
+const LOGO_IMAGE = "/images/pictobook-logo.optimized.webp";
 const TURNSTILE_SCRIPT_ID = "cf-turnstile-script";
 const TURNSTILE_SCRIPT_SRC =
   "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
@@ -327,9 +328,13 @@ export default function Home() {
         <div className="container flex items-center justify-between h-16">
           <div className="flex items-center gap-2">
             <img
-              src="/images/pictobook-logo.png"
+              src={LOGO_IMAGE}
               alt="Pictobook logo"
               className="w-8 h-8"
+              width={128}
+              height={128}
+              loading="eager"
+              decoding="async"
             />
             <span
               className="font-bold text-lg tracking-tight"
@@ -486,6 +491,12 @@ export default function Home() {
                   src={HERO_IMAGE}
                   alt="Photo transformed into a coloring page"
                   className="w-full max-w-[600px] rounded-2xl shadow-2xl"
+                  width={1200}
+                  height={670}
+                  loading="eager"
+                  fetchPriority="high"
+                  decoding="async"
+                  sizes="(max-width: 1024px) 100vw, 600px"
                   style={{
                     boxShadow: "0 32px 80px oklch(0.22 0.04 255 / 0.2)",
                   }}
@@ -592,6 +603,11 @@ export default function Home() {
                       src={step.image}
                       alt={step.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      width={800}
+                      height={800}
+                      loading="lazy"
+                      decoding="async"
+                      sizes="(max-width: 768px) 100vw, 400px"
                     />
                   </div>
                   <div className="p-6">
@@ -903,9 +919,13 @@ export default function Home() {
         <div className="container flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2 shrink-0">
             <img
-              src="/images/pictobook-logo.png"
+              src={LOGO_IMAGE}
               alt="Pictobook logo"
               className="w-7 h-7"
+              width={128}
+              height={128}
+              loading="lazy"
+              decoding="async"
             />
             <span
               className="font-bold text-base"
