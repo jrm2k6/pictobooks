@@ -1,14 +1,24 @@
 import ReactMarkdown from "react-markdown";
 import { Link } from "wouter";
+import Seo from "@/components/Seo";
 
 interface LegalPageProps {
   content: string;
+  title: string;
+  description: string;
+  path: string;
 }
 
-export default function LegalPage({ content }: LegalPageProps) {
+export default function LegalPage({
+  content,
+  title,
+  description,
+  path,
+}: LegalPageProps) {
   const logoImage = "/images/pictobook-logo.optimized.webp";
   return (
     <div className="min-h-screen" style={{ background: "oklch(0.99 0.005 80)" }}>
+      <Seo title={title} description={description} path={path} />
       {/* Nav */}
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md border-b border-[oklch(0.9_0.01_80)/60]" style={{ background: "oklch(0.99 0.005 80 / 0.9)" }}>
         <div className="container flex items-center h-16">

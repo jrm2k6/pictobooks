@@ -9,6 +9,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
+import Seo from "@/components/Seo";
 import {
   WAITLIST_ENDPOINT,
   type WaitlistSignupRequest,
@@ -315,11 +316,36 @@ function WaitlistForm({
 }
 
 export default function Home() {
+  const schema = [
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: "Pictobook",
+      url: "https://pictobook.app/",
+      logo: "https://pictobook.app/images/pictobook-logo.optimized.webp",
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "Pictobook",
+      url: "https://pictobook.app/",
+      description:
+        "Pictobook turns family photos into personalized coloring books for kids ages 3 to 12.",
+    },
+  ];
+
   return (
     <div
       className="min-h-screen overflow-x-hidden"
       style={{ background: "oklch(0.99 0.005 80)" }}
     >
+      <Seo
+        title="Personalized Coloring Books from Your Photos"
+        description="Turn family photos into personalized coloring books for kids ages 3 to 12 with Pictobook."
+        path="/"
+        image="/images/hero_main.png"
+        jsonLd={schema}
+      />
       {/* ── NAV ── */}
       <nav
         className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md border-b border-[oklch(0.9_0.01_80)/60]"
