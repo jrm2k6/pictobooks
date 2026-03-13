@@ -361,6 +361,7 @@ export default function Home() {
         </div>
       </nav>
 
+      <main>
       {/* ── HERO ── */}
       <section className="relative pt-24 pb-0 overflow-hidden">
         {/* Background blob */}
@@ -425,7 +426,7 @@ export default function Home() {
               <WaitlistForm />
 
               <p
-                className="mt-3 text-xs text-[oklch(0.6_0.01_80)]"
+                className="mt-3 text-xs text-[oklch(0.45_0.02_255)]"
                 style={{ fontFamily: "Plus Jakarta Sans, sans-serif" }}
               >
                 No spam. Unsubscribe anytime. Early access + launch discount for
@@ -910,6 +911,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+      </main>
 
       {/* ── FOOTER ── */}
       <footer
@@ -938,13 +940,13 @@ export default function Home() {
             </span>
           </div>
           <p
-            className="text-xs text-[oklch(0.6_0.01_80)] shrink-0"
+            className="text-xs text-[oklch(0.45_0.02_255)] shrink-0"
             style={{ fontFamily: "Plus Jakarta Sans, sans-serif" }}
           >
             © 2026 Pictobook. All rights reserved.
           </p>
           <div
-            className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-[oklch(0.6_0.01_80)]"
+            className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-[oklch(0.45_0.02_255)]"
             style={{ fontFamily: "Plus Jakarta Sans, sans-serif" }}
           >
             <Link
