@@ -6,13 +6,22 @@ interface LegalPageProps {
 }
 
 export default function LegalPage({ content }: LegalPageProps) {
+  const logoImage = "/images/pictobook-logo.optimized.webp";
   return (
     <div className="min-h-screen" style={{ background: "oklch(0.99 0.005 80)" }}>
       {/* Nav */}
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md border-b border-[oklch(0.9_0.01_80)/60]" style={{ background: "oklch(0.99 0.005 80 / 0.9)" }}>
         <div className="container flex items-center h-16">
           <Link href="/" className="flex items-center gap-2">
-            <img src="/images/pictobook-logo.png" alt="Pictobook logo" className="w-8 h-8" />
+            <img
+              src={logoImage}
+              alt="Pictobook logo"
+              className="w-8 h-8"
+              width={128}
+              height={128}
+              loading="eager"
+              decoding="async"
+            />
             <span className="font-bold text-lg tracking-tight" style={{ fontFamily: "Fraunces, serif", color: "oklch(0.22 0.04 255)" }}>
               Pictobook
             </span>
