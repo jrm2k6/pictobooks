@@ -1,0 +1,1117 @@
+openapi: 3.1.1
+info:
+  title: Pictobook Customer API
+  version: 1.0.0-draft
+  summary: Target HTTP contract for the Pictobook customer application.
+  description: >-
+    Draft contract for implementation planning. Some listed customer
+    operations are not implemented yet; see docs/customer-api-contract.md.
+externalDocs:
+  description: Screen, React component, and query-hook integration map
+  url: customer-screen-api-map.yaml
+servers:
+  - url: https://api.pictobook.app
+    description: Planned production origin
+  - url: http://127.0.0.1:8787
+    description: Local Worker development
+security:
+  - clerkBearer: []
+tags:
+  - name: Books
+    description: >-
+      Library and setup: My books / First visit → Book details. Create or list
+      customer-owned books and persist personalization fields.
+  - name: Generation
+    description: >-
+      Photo intake and progress: Choose photos → Order the pages → Pages are
+      being made → Some pages are taking longer. Local development uploads
+      through the authenticated Worker into local R2; other environments may
+      use signed R2 URLs.
+  - name: Review
+    description: >-
+      Page decisions and preview: Review a page ↔ A page needs attention →
+      Preview the book. Reviews name an exact candidate; regeneration creates a
+      new bounded run from the original source.
+  - name: Catalog
+    description: >-
+      Purchase choice: Preview the book → Choose an edition. Pricing and
+      availability come from the API, not hard-coded screen values.
+  - name: Orders
+    description: >-
+      Checkout and follow-up: Choose an edition → Delivery details → Order
+      received. Payment completion is confirmed through a verified provider
+      webhook, then order state is read from the API.
+x-customer-journeys:
+  source: apps/web/stateMachine.js
+  screenIdsSource: apps/web/screenCatalog.js
+  journeys:
+    - id: account
+      title: Account and return visit
+      states: [account, account-sent, library]
+      steps:
+        - event: Continue with Google or email link
+          handledBy: Clerk React SDK; no Pictobook API request
+        - event: Sign-in completes
+          handledBy: Clerk React SDK session; the library then loads through listBooks
+    - id: create-book
+      title: Create and generate a book
+      states: [library, empty, create, upload, arrange, processing, slow]
+      steps:
+        - event: Create book
+          operationId: createBook
+          from: [library, empty]
+          to: create
+        - event: Save book details
+          operationId: updateBook
+          from: create
+          to: upload
+        - event: Choose photos and create upload intents
+          operationId: createBookRun
+          from: upload
+          to: arrange
+        - event: Persist page order
+          operationId: updatePhotoOrder
+          from: arrange
+          to: arrange
+        - event: Start making pages
+          operationId: startBookRun
+          from: arrange
+          to: processing
+        - event: Poll for progress
+          operationId: getBookRun
+          from: [processing, slow]
+          to: [processing, slow, review, issue]
+    - id: review-and-repair
+      title: Review, repair, and preview
+      states: [review, issue, preview]
+      steps:
+        - event: Load candidate and QA results
+          operationId: getBookRun
+          from: [review, issue, preview]
+        - event: Keep this page
+          operationId: reviewCandidate
+          from: review
+          to: preview
+          decision: approved
+        - event: Request another version
+          operationId: reviewCandidate
+          from: review
+          to: issue
+          decision: changes_requested
+          note: Save optional customer correction notes so the later regeneration can use them.
+        - event: Retry this page
+          operationId: regeneratePage
+          from: issue
+          to: processing
+        - event: Load private page or book export
+          operationId: getArtifactAccess
+          from: preview
+    - id: purchase
+      title: Choose, check out, and track an order
+      states: [preview, edition, checkout, complete]
+      steps:
+        - event: Show available formats and prices
+          operationId: listEditions
+          from: preview
+          to: edition
+        - event: Place order and open hosted checkout
+          operationId: createOrder
+          from: checkout
+          to: checkout
+        - event: Read payment and fulfillment status
+          operationId: getOrder
+          from: complete
+          to: complete
+    - id: recovery
+      title: Upload and generation recovery
+      states: [upload-error, generation-error, issue]
+      steps:
+        - event: Read failed page/run state
+          operationId: getBookRun
+        - event: Refresh a failed photo upload URL
+          operationId: refreshUploadIntent
+          from: upload-error
+        - event: Open the needs-attention state
+          operationId: none
+          from: generation-error
+          to: issue
+        - event: Retry a failed page from source
+          operationId: regeneratePage
+          from: issue
+          to: processing
+paths:
+  /v1/books:
+    get:
+      tags: [Books]
+      operationId: listBooks
+      summary: List the customer's books and current summaries
+      description: >-
+        Customer flow states: `library` and `empty`.
+      responses:
+        "200":
+          description: Books ordered by most recently updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [books]
+                properties:
+                  books:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/BookSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Books]
+      operationId: createBook
+      summary: Create a customer-owned draft book
+      description: >-
+        Customer transition: `library` or `empty` → `create` (Book details).
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookDraftInput"
+      responses:
+        "201":
+          description: Draft created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookCreated"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /v1/books/{bookId}:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+    patch:
+      tags: [Books]
+      operationId: updateBook
+      summary: Update the draft's title and personalization details
+      description: >-
+        Customer screen: `create` (Book details); save title, child name, and
+        age before photo selection.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookDraftInput"
+      responses:
+        "200":
+          description: Updated book
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /v1/catalog/editions:
+    get:
+      tags: [Catalog]
+      operationId: listEditions
+      summary: List edition options for the customer UI
+      description: >-
+        Customer transition: `preview` → `edition` (Choose an edition). The
+        local implementation returns prototype-only unavailable entries with
+        zero prices. They are not offers or fulfillment commitments.
+      responses:
+        "200":
+          description: Edition options; local values are illustrative only
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [editions, currency]
+                properties:
+                  currency:
+                    type: string
+                    pattern: "^[A-Z]{3}$"
+                  editions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Edition"
+  /v1/books/{bookId}/runs:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+    get:
+      tags: [Generation]
+      operationId: listBookRuns
+      summary: List generation attempts for a book
+      description: >-
+        Customer screen: `library`; supports resuming a run.
+      responses:
+        "200":
+          description: Book runs, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [runs]
+                properties:
+                  runs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RunSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Generation]
+      operationId: createBookRun
+      summary: Create a run and scoped direct-upload intents for its source photos
+      description: >-
+        Customer transition: `upload` (Choose photos) → `arrange` (Order the
+        pages). In local development the browser uploads to the authenticated
+        Worker route, which writes through the local R2 binding. Non-local
+        environments may return a scoped R2 upload URL.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [photos]
+              properties:
+                photos:
+                  type: array
+                  minItems: 5
+                  maxItems: 10
+                  items:
+                    $ref: "#/components/schemas/PhotoUploadInput"
+                stylePackVersion:
+                  type: string
+                costCeilingMicros:
+                  type: integer
+                  minimum: 0
+      responses:
+        "201":
+          description: Run and short-lived R2 PUT URLs created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunCreated"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /v1/books/{bookId}/runs/{runId}:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+      - $ref: "#/components/parameters/RunId"
+    get:
+      tags: [Generation]
+      operationId: getBookRun
+      summary: Get run, page, candidate, QA, repair, and review status
+      description: >-
+        Customer screens: `processing`, `slow`, `review`, `issue`, `preview`,
+        and recovery states. Poll while the run is active; stop at a terminal
+        state.
+      responses:
+        "200":
+          description: Current run detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookRunDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /v1/books/{bookId}/runs/{runId}/start:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+      - $ref: "#/components/parameters/RunId"
+    post:
+      tags: [Generation]
+      operationId: startBookRun
+      summary: Verify completed uploads and start the durable generation Workflow
+      description: >-
+        Customer transition: `arrange` (Order the pages) → `processing` (Pages
+        are being made).
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202":
+          description: Generation accepted for asynchronous execution
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bookId, runId, status]
+                properties:
+                  bookId:
+                    type: string
+                  runId:
+                    type: string
+                  status:
+                    const: started
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /v1/books/{bookId}/runs/{runId}/upload-intents/{uploadIntentId}/refresh:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+      - $ref: "#/components/parameters/RunId"
+      - name: uploadIntentId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [Generation]
+      operationId: refreshUploadIntent
+      summary: Issue a fresh short-lived R2 upload URL for a pending photo
+      description: >-
+        Customer screen: `upload-error`. This refreshes upload access for the
+        existing pending upload intent; it does not create another photo or run.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Refreshed upload URL and required headers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadIntent"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /v1/books/{bookId}/runs/{runId}/upload-intents/{uploadIntentId}/content:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+      - $ref: "#/components/parameters/RunId"
+      - name: uploadIntentId
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      tags: [Generation]
+      operationId: uploadPhotoLocal
+      summary: Upload a photo through the local Worker to local R2
+      description: >-
+        Local-only authenticated upload route. The Worker verifies ownership,
+        pending intent, media type, byte count, and SHA-256 before writing.
+      x-environment: local-only
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+          image/png:
+            schema:
+              type: string
+              format: binary
+          image/webp:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "201":
+          description: Photo bytes stored in local R2
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "410":
+          $ref: "#/components/responses/Gone"
+  /v1/artifacts/{artifactId}/content:
+    parameters:
+      - name: artifactId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Generation]
+      operationId: getLocalArtifactContent
+      summary: Stream an owner-authorized artifact from local R2
+      description: Local-only binary access route returned by the access operation.
+      x-environment: local-only
+      responses:
+        "200":
+          description: Artifact bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /v1/books/{bookId}/runs/{runId}/photo-order:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+      - $ref: "#/components/parameters/RunId"
+    patch:
+      tags: [Generation]
+      operationId: updatePhotoOrder
+      summary: Persist the customer's page order before generation starts
+      description: >-
+        Customer screen: `arrange` (Order the pages). Must be called before
+        `startBookRun`.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [photoIds]
+              properties:
+                photoIds:
+                  type: array
+                  minItems: 5
+                  maxItems: 10
+                  uniqueItems: true
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Persisted photo order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [runId, photoIds]
+                properties:
+                  runId:
+                    type: string
+                  photoIds:
+                    type: array
+                    items:
+                      type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /v1/books/{bookId}/pages/{pageId}/reviews:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+      - $ref: "#/components/parameters/PageId"
+    post:
+      tags: [Review]
+      operationId: reviewCandidate
+      summary: Record a customer decision for one exact candidate revision
+      description: >-
+        Customer screen: `review` (Review a page). Approving/keeping or
+        rejecting must reference the exact candidate ID.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [candidateId, decision]
+              properties:
+                candidateId:
+                  type: string
+                decision:
+                  type: string
+                  enum: [approved, rejected, changes_requested]
+                notes:
+                  type: string
+                  maxLength: 2000
+      responses:
+        "201":
+          description: Review recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reviewId, pageId, candidateId, decision]
+                properties:
+                  reviewId:
+                    type: string
+                  pageId:
+                    type: string
+                  candidateId:
+                    type: string
+                  decision:
+                    type: string
+                    enum: [approved, rejected, changes_requested]
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /v1/books/{bookId}/pages/{pageId}/regenerations:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+      - $ref: "#/components/parameters/PageId"
+    post:
+      tags: [Review]
+      operationId: regeneratePage
+      summary: Start a bounded new run from the original source page
+      description: >-
+        Customer transition: `issue` or `review` → `processing`. The source
+        page's judge findings and reviewer notes are snapshotted and sent to
+        the generation provider as repair feedback.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                costCeilingMicros:
+                  type: integer
+                  minimum: 3000
+      responses:
+        "202":
+          description: Regeneration run started
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bookId, sourcePageId, runId, pageId]
+                properties:
+                  bookId:
+                    type: string
+                  sourcePageId:
+                    type: string
+                  runId:
+                    type: string
+                  pageId:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /v1/artifacts/{artifactId}/access:
+    parameters:
+      - name: artifactId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Generation]
+      operationId: getArtifactAccess
+      summary: Get a short-lived private download URL for an owned artifact
+      description: >-
+        Customer screens: `review` and `preview`. The returned URL is temporary
+        and must not be stored as a permanent artifact URL.
+      responses:
+        "200":
+          description: Temporary artifact access
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [artifactId, access]
+                properties:
+                  artifactId:
+                    type: string
+                  access:
+                    type: object
+                    required: [url, method, headers, expiresAt]
+                    properties:
+                      url:
+                        type: string
+                        format: uri-reference
+                      method:
+                        type: string
+                        enum: [GET]
+                      headers:
+                        type: object
+                        additionalProperties:
+                          type: string
+                      expiresAt:
+                        type: string
+                        format: date-time
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /v1/books/{bookId}/orders:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+    post:
+      tags: [Orders]
+      operationId: createOrder
+      summary: Create a pending order and provider checkout session
+      description: >-
+        Customer screen: `checkout` (Delivery details). Browser return URLs do
+        not confirm payment; wait for the verified provider webhook and read
+        order state.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [editionId, customerEmail]
+              properties:
+                editionId:
+                  type: string
+                customerEmail:
+                  type: string
+                  format: email
+                shippingAddress:
+                  $ref: "#/components/schemas/ShippingAddress"
+      responses:
+        "201":
+          description: Pending order and hosted checkout URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [orderId, status, checkoutUrl]
+                properties:
+                  orderId:
+                    type: string
+                  status:
+                    const: awaiting_payment
+                  checkoutUrl:
+                    type: string
+                    format: uri
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /v1/orders/{orderId}:
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Orders]
+      operationId: getOrder
+      summary: Get an owned order's payment, production, and delivery status
+      description: >-
+        Customer screens: `complete` (Order received) and bookshelf order-status
+        views.
+      responses:
+        "200":
+          description: Order status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+components:
+  securitySchemes:
+    clerkBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Clerk session token; verified by the API Worker.
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Reusing a key for the same operation returns its original result.
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 200
+    BookId:
+      name: bookId
+      in: path
+      required: true
+      schema:
+        type: string
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema:
+        type: string
+    PageId:
+      name: pageId
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: Invalid request data
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Unauthorized:
+      description: Missing, invalid, or expired authentication
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: Resource not found or not owned by the current customer
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Conflict:
+      description: Resource is not in a state that permits this operation
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Gone:
+      description: The upload intent expired
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Unavailable:
+      description: Required generation provider or configuration is unavailable
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference
+        code:
+          type: string
+          description: Stable application error code for client handling.
+    BookDraftInput:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+        childName:
+          type: string
+          maxLength: 80
+        childAge:
+          type: integer
+          minimum: 3
+          maximum: 12
+    BookCreated:
+      type: object
+      required: [bookId, status]
+      properties:
+        bookId:
+          type: string
+        status:
+          const: draft
+    Book:
+      type: object
+      required: [bookId, status]
+      properties:
+        bookId:
+          type: string
+        status:
+          type: string
+          enum: [draft, processing, review, completed, cancelled]
+        title:
+          type: [string, "null"]
+        childName:
+          type: [string, "null"]
+        childAge:
+          type: [integer, "null"]
+          minimum: 3
+          maximum: 12
+    BookSummary:
+      allOf:
+        - $ref: "#/components/schemas/Book"
+        - type: object
+          required: [updatedAt, runCount]
+          properties:
+            updatedAt:
+              type: string
+              format: date-time
+            runCount:
+              type: integer
+              minimum: 0
+            latestRun:
+              $ref: "#/components/schemas/RunSummary"
+            orderStatus:
+              type: [string, "null"]
+    PhotoUploadInput:
+      type: object
+      required: [contentType, byteSize, sha256]
+      properties:
+        contentType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+        byteSize:
+          type: integer
+          minimum: 1
+          maximum: 26214400
+        sha256:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+        ordinal:
+          type: integer
+          minimum: 1
+          maximum: 10
+    UploadIntent:
+      type: object
+      required:
+        [
+          uploadIntentId,
+          photoId,
+          artifactId,
+          uploadUrl,
+          expiresAt,
+          requiredHeaders,
+        ]
+      properties:
+        uploadIntentId:
+          type: string
+        photoId:
+          type: string
+        artifactId:
+          type: string
+        uploadUrl:
+          type: string
+          format: uri-reference
+        expiresAt:
+          type: string
+          format: date-time
+        requiredHeaders:
+          type: object
+          additionalProperties:
+            type: string
+    RunCreated:
+      type: object
+      required: [bookId, runId, uploads]
+      properties:
+        bookId:
+          type: string
+        runId:
+          type: string
+        uploads:
+          type: array
+          items:
+            $ref: "#/components/schemas/UploadIntent"
+    RunSummary:
+      type: object
+      required: [runId, status, createdAt]
+      properties:
+        runId:
+          type: string
+        status:
+          type: string
+          enum:
+            [
+              created,
+              running,
+              partially_completed,
+              completed,
+              failed,
+              cancelled,
+            ]
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: [string, "null"]
+          format: date-time
+        readyPageCount:
+          type: integer
+          minimum: 0
+        totalPageCount:
+          type: integer
+          minimum: 0
+    BookRunDetail:
+      allOf:
+        - $ref: "#/components/schemas/RunSummary"
+        - type: object
+          required: [bookId, pages]
+          properties:
+            bookId:
+              type: string
+            pages:
+              type: array
+              items:
+                $ref: "#/components/schemas/Page"
+    Page:
+      type: object
+      required: [pageId, photoId, state, candidates]
+      properties:
+        pageId:
+          type: string
+        photoId:
+          type: string
+        state:
+          type: string
+          enum:
+            [
+              created,
+              analyzing,
+              generating,
+              print_qa,
+              style_qa,
+              repairing,
+              intake_rejected,
+              intake_needs_review,
+              needs_human_review,
+              provider_failed,
+              budget_exhausted,
+              approved,
+              rejected,
+            ]
+        approvedCandidateId:
+          type: [string, "null"]
+        candidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Candidate"
+    Candidate:
+      type: object
+      required: [candidateId, generationKind, printQa, styleQa]
+      properties:
+        candidateId:
+          type: string
+        generationKind:
+          type: string
+          enum: [initial, repair]
+        artifactId:
+          type: [string, "null"]
+        printQa:
+          $ref: "#/components/schemas/QaResult"
+        styleQa:
+          $ref: "#/components/schemas/QaResult"
+    QaResult:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [pending, passed, failed, needs_review]
+        score:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+        findings:
+          type: array
+          items:
+            type: string
+    Edition:
+      type: object
+      required: [editionId, name, format, priceMinor, available]
+      properties:
+        editionId:
+          type: string
+        name:
+          type: string
+        format:
+          type: string
+          enum: [pdf, print]
+        priceMinor:
+          type: integer
+          minimum: 0
+        shippingPriceMinor:
+          type: integer
+          minimum: 0
+        available:
+          type: boolean
+    ShippingAddress:
+      type: object
+      required: [name, addressLine1, city, postalCode, countryCode]
+      properties:
+        name:
+          type: string
+        addressLine1:
+          type: string
+        addressLine2:
+          type: string
+        city:
+          type: string
+        region:
+          type: string
+        postalCode:
+          type: string
+        countryCode:
+          type: string
+          pattern: "^[A-Z]{2}$"
+    Order:
+      type: object
+      required: [orderId, bookId, status, editionId, createdAt]
+      properties:
+        orderId:
+          type: string
+        bookId:
+          type: string
+        status:
+          type: string
+          enum:
+            [
+              awaiting_payment,
+              paid,
+              producing,
+              shipped,
+              delivered,
+              cancelled,
+              refunded,
+              failed,
+            ]
+        editionId:
+          type: string
+        trackingUrl:
+          type: [string, "null"]
+          format: uri
+        createdAt:
+          type: string
+          format: date-time

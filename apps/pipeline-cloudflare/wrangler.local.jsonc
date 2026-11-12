@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pictobook-pipeline-local",
+  "main": "src/index.ts",
+  "workers_dev": false,
+  "compatibility_date": "2026-11-07",
+  "vars": {
+    "PIPELINE_INITIAL_CANDIDATE_COUNT": "2",
+    "LOCAL_CUSTOMER_API": "true",
+    "IMAGE_PROVIDER": "mock",
+  },
+  "d1_databases": [
+    {
+      "binding": "PIPELINE_DB",
+      "database_name": "pictobook-pipeline-spike-dev",
+      "database_id": "7bbba9dc-277f-4536-b057-c6dc58fc010d",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PIPELINE_ARTIFACTS",
+      "bucket_name": "pictobook-pipeline-spike-dev",
+    },
+  ],
+  "workflows": [
+    {
+      "name": "pictobook-pipeline-local",
+      "binding": "BOOK_RUN_WORKFLOW",
+      "class_name": "BookRunWorkflow",
+    },
+    {
+      "name": "pictobook-production-book-run-local",
+      "binding": "PRODUCTION_BOOK_RUN_WORKFLOW",
+      "class_name": "ProductionBookRunWorkflow",
+    },
+  ],
+}
