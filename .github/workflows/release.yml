@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+# If several PRs merge close together, let the newest run release the latest
+# main commit and include all changes since the previous release.
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main and tags
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Calculate the next version
+        id: version
+        shell: bash
+        run: |
+          latest_tag="$(git tag --list 'v[0-9]*' --sort=-version:refname | head -n 1)"
+          if [[ -z "$latest_tag" ]]; then
+            echo "tag=v0.1.0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$(git rev-parse "${latest_tag}^{commit}")" == "$(git rev-parse HEAD)" ]]; then
+            echo "No commits since $latest_tag; skipping release."
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ ! "$latest_tag" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Latest version tag '$latest_tag' is not a vMAJOR.MINOR.PATCH tag." >&2
+            exit 1
+          fi
+
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          patch="${BASH_REMATCH[3]}"
+          bump=patch
+          if git log --format=%B "$latest_tag..HEAD" | grep -Eq '(^[a-z]+(\([^)]*\))?!:|BREAKING CHANGE:)'; then
+            bump=major
+          elif git log --format=%s "$latest_tag..HEAD" | grep -Eq '^feat(\([^)]*\))?:'; then
+            bump=minor
+          fi
+
+          case "$bump" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+
+          echo "tag=v${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release and tag
+        if: steps.version.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: gh release create "$RELEASE_TAG" --target "$(git rev-parse HEAD)" --title "Pictobook $RELEASE_TAG" --generate-notes
