@@ -16,7 +16,8 @@ export class LocalMockImageProcessor implements ImageProcessor {
 
   async cleanup(input: ImageOperationInput): Promise<ImageArtifactResult> {
     const source = await this.bucket.get(input.input.objectKey);
-    if (!source) throw new Error(`Local mock input ${input.input.artifactId} is missing`);
+    if (!source)
+      throw new Error(`Local mock input ${input.input.artifactId} is missing`);
     const body = await source.arrayBuffer();
     const mimeType = source.httpMetadata?.contentType ?? "image/svg+xml";
     const sha256 = await sha256Hex(body);

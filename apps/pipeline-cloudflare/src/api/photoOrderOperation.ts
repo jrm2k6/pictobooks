@@ -64,7 +64,9 @@ export const updatePhotoOrder = async (
   // Touch the parent book timestamp as part of the same batch for list sorting.
   statements.push(
     database
-      .prepare("UPDATE books SET updated_at = ? WHERE book_id = ? AND owner_id = ?")
+      .prepare(
+        "UPDATE books SET updated_at = ? WHERE book_id = ? AND owner_id = ?"
+      )
       .bind(now, bookId, ownerId)
   );
   await database.batch(statements);

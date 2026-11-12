@@ -28,24 +28,30 @@ export const handleApiRequest = async (
       localCustomerApi
         ? new R2Presigner("local", "local", "http://127.0.0.1", "local")
         : new R2Presigner(
-        requiredEnv(env, "R2_ACCESS_KEY_ID"),
-        requiredEnv(env, "R2_SECRET_ACCESS_KEY"),
-        requiredEnv(env, "R2_ENDPOINT"),
-        requiredEnv(env, "R2_BUCKET")
-      ),
+            requiredEnv(env, "R2_ACCESS_KEY_ID"),
+            requiredEnv(env, "R2_SECRET_ACCESS_KEY"),
+            requiredEnv(env, "R2_ENDPOINT"),
+            requiredEnv(env, "R2_BUCKET")
+          ),
       workflowLauncher(env),
       undefined,
       {
         provider: env.IMAGE_PROVIDER === "gemini" ? "gemini" : "mock",
-        model: env.IMAGE_PROVIDER === "gemini"
-          ? (env.GEMINI_IMAGE_MODEL || "gemini-nano-banana-2.1")
-          : "mock-coloring-page-v1",
-        styleJudgeModel: env.IMAGE_PROVIDER === "gemini"
-          ? (env.GEMINI_VISION_MODEL || "gemini-3.8-flash")
-          : "mock-style-v1",
-        candidateCostMicros: parsePositiveInteger(env.GEMINI_CANDIDATE_COST_MICROS) ?? 0,
-        styleJudgeCostMicros: parsePositiveInteger(env.GEMINI_STYLE_JUDGE_COST_MICROS) ?? 0,
-        initialCandidateCount: parsePositiveInteger(env.PIPELINE_INITIAL_CANDIDATE_COUNT) ?? DEFAULT_INITIAL_CANDIDATE_COUNT,
+        model:
+          env.IMAGE_PROVIDER === "gemini"
+            ? env.GEMINI_IMAGE_MODEL || "gemini-nano-banana-2.1"
+            : "mock-coloring-page-v1",
+        styleJudgeModel:
+          env.IMAGE_PROVIDER === "gemini"
+            ? env.GEMINI_VISION_MODEL || "gemini-3.8-flash"
+            : "mock-style-v1",
+        candidateCostMicros:
+          parsePositiveInteger(env.GEMINI_CANDIDATE_COST_MICROS) ?? 0,
+        styleJudgeCostMicros:
+          parsePositiveInteger(env.GEMINI_STYLE_JUDGE_COST_MICROS) ?? 0,
+        initialCandidateCount:
+          parsePositiveInteger(env.PIPELINE_INITIAL_CANDIDATE_COUNT) ??
+          DEFAULT_INITIAL_CANDIDATE_COUNT,
         apiKeyConfigured: Boolean(env.GEMINI_API_KEY),
       },
       localCustomerApi
@@ -90,20 +96,27 @@ const route = async (
     /^\/v1\/books\/([^/]+)\/runs\/([^/]+)\/upload-intents\/([^/]+)\/content$/
   );
   if (request.method === "PUT" && uploadContent) {
-    return api.acceptLocalUpload(
-      principal,
-      safePathId(uploadContent[1]),
-      safePathId(uploadContent[2]),
-      safePathId(uploadContent[3]),
-      request
-    ).then(response => Response.json(response.body, { status: response.status }));
+    return api
+      .acceptLocalUpload(
+        principal,
+        safePathId(uploadContent[1]),
+        safePathId(uploadContent[2]),
+        safePathId(uploadContent[3]),
+        request
+      )
+      .then(response =>
+        Response.json(response.body, { status: response.status })
+      );
   }
 
   const artifactContent = url.pathname.match(
     /^\/v1\/artifacts\/([^/]+)\/content$/
   );
   if (request.method === "GET" && artifactContent) {
-    return api.readLocalArtifact(principal, decodePathValue(artifactContent[1]));
+    return api.readLocalArtifact(
+      principal,
+      decodePathValue(artifactContent[1])
+    );
   }
 
   const uploadRefresh = url.pathname.match(
@@ -126,7 +139,10 @@ const route = async (
   );
   if (request.method === "PATCH" && photoOrder) {
     const body = await readJson<{ photoIds?: string[] }>(request);
-    if (!Array.isArray(body.photoIds) || body.photoIds.some(id => typeof id !== "string")) {
+    if (
+      !Array.isArray(body.photoIds) ||
+      body.photoIds.some(id => typeof id !== "string")
+    ) {
       throw new ApiProblem(400, "invalid_photo_order");
     }
     return api.updatePhotoOrder(
@@ -148,7 +164,10 @@ const route = async (
   }
 
   if (request.method === "GET" && url.pathname === "/v1/canonical-references") {
-    return api.listCanonicalReferences(principal, url.searchParams.get("stylePackVersion") ?? undefined);
+    return api.listCanonicalReferences(
+      principal,
+      url.searchParams.get("stylePackVersion") ?? undefined
+    );
   }
 
   if (request.method === "POST" && url.pathname === "/v1/books") {

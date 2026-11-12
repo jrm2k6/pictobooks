@@ -127,21 +127,30 @@ export class PipelineApi {
   }
 
   async listBooks(principal: Principal): Promise<ApiResponse> {
-    const books = await this.database.prepare(
-      `SELECT b.book_id, b.status, b.created_at, b.updated_at,
+    const books = await this.database
+      .prepare(
+        `SELECT b.book_id, b.status, b.created_at, b.updated_at,
               (SELECT count(*) FROM book_runs r WHERE r.book_id = b.book_id) AS run_count
        FROM books b WHERE b.owner_id = ? ORDER BY b.updated_at DESC LIMIT 100`
-    ).bind(principal.userId).all();
+      )
+      .bind(principal.userId)
+      .all();
     return { status: 200, body: { books: books.results } };
   }
 
-  async listBookRuns(principal: Principal, bookId: string): Promise<ApiResponse> {
+  async listBookRuns(
+    principal: Principal,
+    bookId: string
+  ): Promise<ApiResponse> {
     await this.requireOwnedBook(principal.userId, bookId);
-    const runs = await this.database.prepare(
-      `SELECT run_id, book_id, status, style_pack_version, cost_ceiling_micros,
+    const runs = await this.database
+      .prepare(
+        `SELECT run_id, book_id, status, style_pack_version, cost_ceiling_micros,
               cost_spent_micros, created_at, updated_at, completed_at
        FROM book_runs WHERE book_id = ? ORDER BY created_at DESC LIMIT 100`
-    ).bind(bookId).all();
+      )
+      .bind(bookId)
+      .all();
     return { status: 200, body: { runs: runs.results } };
   }
 
@@ -206,9 +215,13 @@ export class PipelineApi {
     );
   }
 
-  async listCanonicalReferences(principal: Principal, stylePackVersion?: string): Promise<ApiResponse> {
-    const refs = await this.database.prepare(
-      `SELECT cr.canonical_reference_id, cr.candidate_id, cr.style_pack_version,
+  async listCanonicalReferences(
+    principal: Principal,
+    stylePackVersion?: string
+  ): Promise<ApiResponse> {
+    const refs = await this.database
+      .prepare(
+        `SELECT cr.canonical_reference_id, cr.candidate_id, cr.style_pack_version,
               cr.style_pack_revision, cr.artifact_id, cr.promoted_at
        FROM canonical_references cr
        JOIN candidates c ON c.candidate_id = cr.candidate_id
@@ -218,7 +231,13 @@ export class PipelineApi {
        WHERE b.owner_id = ? AND cr.retired_at IS NULL
          AND (? IS NULL OR cr.style_pack_version = ?)
        ORDER BY cr.style_pack_version, cr.style_pack_revision DESC LIMIT 200`
-    ).bind(principal.userId, stylePackVersion ?? null, stylePackVersion ?? null).all();
+      )
+      .bind(
+        principal.userId,
+        stylePackVersion ?? null,
+        stylePackVersion ?? null
+      )
+      .all();
     return { status: 200, body: { canonicalReferences: refs.results } };
   }
 
@@ -240,14 +259,18 @@ export class PipelineApi {
         await this.requireOwnedBook(principal.userId, bookId);
         this.assertGenerationProviderAvailable();
         validatePhotos(input.photos);
-        if (this.localCustomerApi && (input.photos.length < 5 || input.photos.length > 10)) {
+        if (
+          this.localCustomerApi &&
+          (input.photos.length < 5 || input.photos.length > 10)
+        ) {
           throw new ApiProblem(400, "invalid_photo_count");
         }
         const runId = `run-${stable}`;
         const now = this.isoNow();
         const defaultPerPageCeiling = this.maximumCostPerPageMicros();
         const costCeiling = Math.min(
-          input.costCeilingMicros ?? input.photos.length * defaultPerPageCeiling,
+          input.costCeilingMicros ??
+            input.photos.length * defaultPerPageCeiling,
           input.photos.length * defaultPerPageCeiling
         );
         if (!Number.isSafeInteger(costCeiling) || costCeiling < 0) {
@@ -277,10 +300,16 @@ export class PipelineApi {
              VALUES (?, ?, ?, ?, 'mock_pass_after_repair', ?, ?, ?, ?)
              ON CONFLICT(run_id) DO NOTHING`
             )
-            .bind(runId, this.generation.provider, this.generation.model,
-              this.generation.styleJudgeModel, this.generation.candidateCostMicros,
+            .bind(
+              runId,
+              this.generation.provider,
+              this.generation.model,
+              this.generation.styleJudgeModel,
+              this.generation.candidateCostMicros,
               this.generation.styleJudgeCostMicros,
-              this.generation.initialCandidateCount, now),
+              this.generation.initialCandidateCount,
+              now
+            ),
         ];
         const intents: UploadIntentRow[] = [];
         for (let index = 0; index < input.photos.length; index += 1) {
@@ -434,12 +463,21 @@ export class PipelineApi {
     const run = await readBookRunStatus({ PIPELINE_DB: this.database }, runId);
     if (!run) throw new ApiProblem(404, "run_not_found");
     const [photos, artifacts] = await Promise.all([
-      this.database.prepare("SELECT * FROM photos WHERE run_id = ? ORDER BY ordinal")
-        .bind(runId).all(),
-      this.database.prepare("SELECT artifact_id, page_id, artifact_kind, mime_type, byte_size, created_at FROM artifacts WHERE run_id = ? AND deleted_at IS NULL ORDER BY created_at")
-        .bind(runId).all(),
+      this.database
+        .prepare("SELECT * FROM photos WHERE run_id = ? ORDER BY ordinal")
+        .bind(runId)
+        .all(),
+      this.database
+        .prepare(
+          "SELECT artifact_id, page_id, artifact_kind, mime_type, byte_size, created_at FROM artifacts WHERE run_id = ? AND deleted_at IS NULL ORDER BY created_at"
+        )
+        .bind(runId)
+        .all(),
     ]);
-    return { status: 200, body: { ...run, photos: photos.results, artifacts: artifacts.results } };
+    return {
+      status: 200,
+      body: { ...run, photos: photos.results, artifacts: artifacts.results },
+    };
   }
 
   reviewCandidate(
@@ -576,8 +614,8 @@ export class PipelineApi {
   ): Promise<ApiResponse> {
     return this.mutate(principal, key, `regenerate:${pageId}`, async stable => {
       this.assertGenerationProviderAvailable();
-      const costCeilingMicros = requestedCostCeilingMicros ??
-        this.maximumCostPerPageMicros();
+      const costCeilingMicros =
+        requestedCostCeilingMicros ?? this.maximumCostPerPageMicros();
       if (
         !Number.isSafeInteger(costCeilingMicros) ||
         costCeilingMicros < 3_000
@@ -636,10 +674,16 @@ export class PipelineApi {
              VALUES (?, ?, ?, ?, 'mock_pass_after_repair', ?, ?, ?, ?)
              ON CONFLICT(run_id) DO NOTHING`
           )
-          .bind(runId, this.generation.provider, this.generation.model,
-            this.generation.styleJudgeModel, this.generation.candidateCostMicros,
+          .bind(
+            runId,
+            this.generation.provider,
+            this.generation.model,
+            this.generation.styleJudgeModel,
+            this.generation.candidateCostMicros,
             this.generation.styleJudgeCostMicros,
-            this.generation.initialCandidateCount, now),
+            this.generation.initialCandidateCount,
+            now
+          ),
         this.database
           .prepare(
             `INSERT INTO photos
@@ -663,7 +707,14 @@ export class PipelineApi {
              (new_run_id, source_run_id, source_page_id, requested_by, created_at, feedback_json)
              VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(new_run_id) DO NOTHING`
           )
-          .bind(runId, source.source_run_id, pageId, principal.userId, now, JSON.stringify(feedback)),
+          .bind(
+            runId,
+            source.source_run_id,
+            pageId,
+            principal.userId,
+            now,
+            JSON.stringify(feedback)
+          ),
         this.database
           .prepare(
             "UPDATE books SET status = 'processing', updated_at = ? WHERE book_id = ?"
@@ -686,12 +737,16 @@ export class PipelineApi {
     ) {
       throw new ApiProblem(503, "initial_candidate_count_not_configured");
     }
-    if (this.generation.provider === "gemini" && !this.generation.apiKeyConfigured) {
+    if (
+      this.generation.provider === "gemini" &&
+      !this.generation.apiKeyConfigured
+    ) {
       throw new ApiProblem(503, "gemini_provider_not_configured");
     }
     if (
       this.generation.provider === "gemini" &&
-      (!Number.isSafeInteger(this.generation.candidateCostMicros) || this.generation.candidateCostMicros < 1)
+      (!Number.isSafeInteger(this.generation.candidateCostMicros) ||
+        this.generation.candidateCostMicros < 1)
     ) {
       throw new ApiProblem(503, "gemini_cost_estimate_not_configured");
     }
@@ -713,18 +768,23 @@ export class PipelineApi {
     );
   }
 
-  private async collectRegenerationFeedback(pageId: string): Promise<Record<string, unknown>> {
-    const qa = await this.database.prepare(
-      `SELECT c.candidate_id, q.qa_kind, q.status, q.overall_score, q.artifact_id
+  private async collectRegenerationFeedback(
+    pageId: string
+  ): Promise<Record<string, unknown>> {
+    const qa = await this.database
+      .prepare(
+        `SELECT c.candidate_id, q.qa_kind, q.status, q.overall_score, q.artifact_id
        FROM candidates c JOIN qa_results q ON q.candidate_id = c.candidate_id
        WHERE c.page_id = ? ORDER BY q.created_at DESC LIMIT 12`
-    ).bind(pageId).all<{
-      candidate_id: string;
-      qa_kind: "print" | "style";
-      status: string;
-      overall_score: number | null;
-      artifact_id: string | null;
-    }>();
+      )
+      .bind(pageId)
+      .all<{
+        candidate_id: string;
+        qa_kind: "print" | "style";
+        status: string;
+        overall_score: number | null;
+        artifact_id: string | null;
+      }>();
     const findings: Array<Record<string, unknown>> = [];
     for (const result of qa.results) {
       let detail: unknown;
@@ -744,16 +804,28 @@ export class PipelineApi {
         ...(detail === undefined ? {} : { details: detail }),
       });
     }
-    const reviews = await this.database.prepare(
-      `SELECT candidate_id, decision, notes, created_at FROM reviews
+    const reviews = await this.database
+      .prepare(
+        `SELECT candidate_id, decision, notes, created_at FROM reviews
        WHERE page_id = ? ORDER BY created_at DESC LIMIT 12`
-    ).bind(pageId).all<{ candidate_id: string; decision: string; notes: string | null; created_at: string }>();
+      )
+      .bind(pageId)
+      .all<{
+        candidate_id: string;
+        decision: string;
+        notes: string | null;
+        created_at: string;
+      }>();
     return {
       sourcePageId: pageId,
       judgeFindings: findings,
       reviewerNotes: reviews.results
         .filter(review => review.notes?.trim())
-        .map(review => ({ candidateId: review.candidate_id, decision: review.decision, notes: review.notes!.slice(0, 2000) })),
+        .map(review => ({
+          candidateId: review.candidate_id,
+          decision: review.decision,
+          notes: review.notes!.slice(0, 2000),
+        })),
     };
   }
 

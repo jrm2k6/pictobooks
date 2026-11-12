@@ -10,9 +10,9 @@ const runWrangler = args => {
     "pnpm",
     ["exec", "wrangler", "--config", "wrangler.local.jsonc", ...args],
     {
-    cwd: appDir,
-    encoding: "utf8",
-    stdio: "inherit",
+      cwd: appDir,
+      encoding: "utf8",
+      stdio: "inherit",
     }
   );
   if (result.status !== 0) process.exit(result.status ?? 1);
@@ -35,7 +35,9 @@ const tokenHash = createHash("sha256").update(token).digest("hex");
 const sessionId = `local-${randomUUID()}`;
 const userId = "local-customer";
 const now = new Date();
-const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+const expiresAt = new Date(
+  now.getTime() + 30 * 24 * 60 * 60 * 1000
+).toISOString();
 const sql = `INSERT INTO api_sessions (session_id, token_sha256, user_id, expires_at, revoked_at, created_at) VALUES ('${sessionId}', '${tokenHash}', '${userId}', '${expiresAt}', NULL, '${now.toISOString()}');`;
 
 runWrangler([

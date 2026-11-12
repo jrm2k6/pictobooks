@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+
+zero=0000000000000000000000000000000000000000
+pattern='^(Merge |Revert |(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([[:alnum:]_.-]+\))?!?: .+)'
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue
+
+  if [ "$remote_sha" = "$zero" ]; then
+    range="$local_sha"
+  else
+    range="$remote_sha..$local_sha"
+  fi
+
+  git log --format=%s "$range" --not --remotes | while read -r subject; do
+    if ! printf '%s\n' "$subject" | grep -Eq "$pattern"; then
+      printf 'Blocked push: non-conventional commit subject:\n  %s\n' "$subject" >&2
+      exit 1
+    fi
+  done
+done

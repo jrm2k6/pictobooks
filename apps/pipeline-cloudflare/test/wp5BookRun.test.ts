@@ -144,9 +144,13 @@ describe("WP5 ProductionBookRun", () => {
     const result = await pipeline.run(created.runId, new ImmediateSteps());
 
     expect(result.status).toBe("completed");
-    expect(await scalar("SELECT count(*) FROM pages WHERE state = 'approved'")).toBe(1);
     expect(
-      await scalar("SELECT count(*) FROM artifacts WHERE mime_type = 'image/svg+xml'")
+      await scalar("SELECT count(*) FROM pages WHERE state = 'approved'")
+    ).toBe(1);
+    expect(
+      await scalar(
+        "SELECT count(*) FROM artifacts WHERE mime_type = 'image/svg+xml'"
+      )
     ).toBeGreaterThan(0);
   });
 

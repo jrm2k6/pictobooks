@@ -3,6 +3,10 @@
   "private": true,
   "scripts": {
     "format": "prettier --write .",
+    "format:check": "prettier --check package.json docs apps/pipeline apps/pipeline-cloudflare apps/pipeline-image-worker",
+    "lint": "eslint apps/pipeline/src apps/pipeline-cloudflare/src apps/pipeline-image-worker/src",
+    "ci:check": "pnpm format:check && pnpm lint && pnpm --filter pipeline test && pnpm --filter pipeline build && pnpm --filter pipeline-cloudflare test && pnpm --filter pipeline-cloudflare check && pnpm --filter pipeline-cloudflare deploy:dry && pnpm --filter pipeline-image-worker test",
+    "hooks:install": "git config core.hooksPath .githooks",
     "db:new": "dbmate --migrations-dir db/migrations new",
     "db:up": "dbmate --migrations-dir db/migrations up",
     "db:down": "dbmate --migrations-dir db/migrations down",

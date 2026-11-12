@@ -123,7 +123,10 @@ export class ProductionBookRun {
       await steps.do(`analyze ${page.page_id}`, () => this.acceptPage(page));
       await steps.do(
         `normalize source ${page.page_id}`,
-        { retries: { limit: 3, delay: "2 seconds", backoff: "exponential" }, timeout: "3 minutes" },
+        {
+          retries: { limit: 3, delay: "2 seconds", backoff: "exponential" },
+          timeout: "3 minutes",
+        },
         () => this.normalizeSource(page)
       );
       for (
@@ -305,9 +308,10 @@ export class ProductionBookRun {
     const existing = await this.completedOperation<RoundResult>(operationId);
     if (existing) return existing;
 
-    const candidateCount = semanticAttempt === 0
-      ? run.initial_candidate_count
-      : REPAIR_CANDIDATE_COUNT;
+    const candidateCount =
+      semanticAttempt === 0
+        ? run.initial_candidate_count
+        : REPAIR_CANDIDATE_COUNT;
     const estimatedCost = candidateCount * run.candidate_cost_micros;
     const refreshedRun = await this.getRun(run.run_id);
     if (
@@ -371,7 +375,9 @@ export class ProductionBookRun {
       const ordinal = firstOrdinal + slot;
       const candidateId = `candidate-${page.page_id}-${semanticAttempt}-${slot + 1}`;
       const existingCandidate = await this.database
-        .prepare("SELECT raw_artifact_id FROM candidates WHERE candidate_id = ?")
+        .prepare(
+          "SELECT raw_artifact_id FROM candidates WHERE candidate_id = ?"
+        )
         .bind(candidateId)
         .first<{ raw_artifact_id: string | null }>();
       if (existingCandidate?.raw_artifact_id) {
@@ -383,17 +389,30 @@ export class ProductionBookRun {
       const generated = existingRaw
         ? null
         : run.provider === "gemini"
-          ? await this.generateProviderCandidate(run, page, semanticAttempt, slot)
+          ? await this.generateProviderCandidate(
+              run,
+              page,
+              semanticAttempt,
+              slot
+            )
           : {
-              body: new TextEncoder().encode(mockCandidateSvg(candidateId, semanticAttempt)),
+              body: new TextEncoder().encode(
+                mockCandidateSvg(candidateId, semanticAttempt)
+              ),
               mimeType: "image/svg+xml",
-              relations: [] as Array<{ sourceArtifactId: string; kind: "derived_from" | "references" }>,
+              relations: [] as Array<{
+                sourceArtifactId: string;
+                kind: "derived_from" | "references";
+              }>,
             };
-      const rawFormat = generated?.mimeType === "image/jpeg"
-        ? "jpg"
-        : generated?.mimeType === "image/webp"
-          ? "webp"
-          : run.provider === "gemini" ? "png" : "svg";
+      const rawFormat =
+        generated?.mimeType === "image/jpeg"
+          ? "jpg"
+          : generated?.mimeType === "image/webp"
+            ? "webp"
+            : run.provider === "gemini"
+              ? "png"
+              : "svg";
       const rawKey = objectKeys.candidate({
         bookId: page.book_id,
         runId: run.run_id,
@@ -402,22 +421,23 @@ export class ProductionBookRun {
         variant: "raw",
         format: rawFormat,
       });
-      if (generated) await this.artifacts.putImmutable({
-        artifactId: rawArtifactId,
-        runId: run.run_id,
-        pageId: page.page_id,
-        producingOperationId: operationId,
-        objectKey: rawKey,
-        artifactKind: "candidate_raw",
-        schemaVersion: SCHEMA_VERSION,
-        body: generated.body,
-        mimeType: generated.mimeType,
-        provider: run.provider,
-        model: run.model,
-        retentionClass: "derived",
-        createdAt: now,
-        relations: generated.relations,
-      });
+      if (generated)
+        await this.artifacts.putImmutable({
+          artifactId: rawArtifactId,
+          runId: run.run_id,
+          pageId: page.page_id,
+          producingOperationId: operationId,
+          objectKey: rawKey,
+          artifactKind: "candidate_raw",
+          schemaVersion: SCHEMA_VERSION,
+          body: generated.body,
+          mimeType: generated.mimeType,
+          provider: run.provider,
+          model: run.model,
+          retentionClass: "derived",
+          createdAt: now,
+          relations: generated.relations,
+        });
       await this.database
         .prepare(
           `INSERT INTO candidates
@@ -489,7 +509,10 @@ export class ProductionBookRun {
   ): Promise<{
     body: Uint8Array;
     mimeType: string;
-    relations: Array<{ sourceArtifactId: string; kind: "derived_from" | "references" }>;
+    relations: Array<{
+      sourceArtifactId: string;
+      kind: "derived_from" | "references";
+    }>;
   }> {
     if (!this.providerConfig.apiKey) {
       throw new Error("GEMINI_API_KEY secret is required for Gemini runs");
@@ -498,7 +521,8 @@ export class ProductionBookRun {
       .prepare("SELECT source_artifact_id FROM photos WHERE photo_id = ?")
       .bind(page.photo_id)
       .first<{ source_artifact_id: string | null }>();
-    if (!photo?.source_artifact_id) throw new Error(`Source photo for ${page.page_id} is missing`);
+    if (!photo?.source_artifact_id)
+      throw new Error(`Source photo for ${page.page_id} is missing`);
     const normalizedArtifactId = `normalized:${page.page_id}`;
     const source = await this.artifacts.read(normalizedArtifactId);
     const sourceBytes = await source.object.arrayBuffer();
@@ -507,30 +531,45 @@ export class ProductionBookRun {
       Math.max(0, 14 * 1024 * 1024 - sourceBytes.byteLength)
     );
     const styleBible = await this.requireStyleBible(run.style_pack_version);
-    const corrections = await this.loadGenerationFeedback(run.run_id, page.page_id, semanticAttempt);
+    const corrections = await this.loadGenerationFeedback(
+      run.run_id,
+      page.page_id,
+      semanticAttempt
+    );
     const prompt = [
       "Create a printable black-and-white coloring-book line illustration based on the source photo.",
       "Preserve the main subject and recognizable traits. Use confident clean outlines, simple faces, large open coloring areas, and a restrained or empty background. Do not add captions, lettering, gray fills, hatching, frames, decorative textures, or tiny enclosed coloring zones.",
       `Generate candidate variation ${slot + 1}; vary the composition slightly while preserving the same subject and style.`,
-      corrections ? `CORRECTIONS FROM PRIOR JUDGE AND REVIEW\n${corrections}` : "",
-    ].filter(Boolean).join("\n\n");
+      corrections
+        ? `CORRECTIONS FROM PRIOR JUDGE AND REVIEW\n${corrections}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
     const result = await generateGeminiImage({
       apiKey: this.providerConfig.apiKey,
       model: run.model,
       prompt,
       source: { mimeType: source.record.mime_type, bytes: sourceBytes },
       styleBible,
-      references: refs.map(ref => ({ mimeType: ref.mimeType, bytes: ref.bytes })),
+      references: refs.map(ref => ({
+        mimeType: ref.mimeType,
+        bytes: ref.bytes,
+      })),
     });
-    const mimeType = result.mimeType === "image/jpeg" || result.mimeType === "image/webp"
-      ? result.mimeType
-      : "image/png";
+    const mimeType =
+      result.mimeType === "image/jpeg" || result.mimeType === "image/webp"
+        ? result.mimeType
+        : "image/png";
     return {
       body: result.bytes,
       mimeType,
       relations: [
         { sourceArtifactId: normalizedArtifactId, kind: "derived_from" },
-        ...refs.map(ref => ({ sourceArtifactId: ref.artifactId, kind: "references" as const })),
+        ...refs.map(ref => ({
+          sourceArtifactId: ref.artifactId,
+          kind: "references" as const,
+        })),
       ],
     };
   }
@@ -562,9 +601,11 @@ export class ProductionBookRun {
       .prepare("SELECT source_artifact_id FROM photos WHERE photo_id = ?")
       .bind(page.photo_id)
       .first<{ source_artifact_id: string | null }>();
-    if (!photo?.source_artifact_id) throw new Error(`Source photo for ${page.page_id} is missing`);
+    if (!photo?.source_artifact_id)
+      throw new Error(`Source photo for ${page.page_id} is missing`);
     const source = await this.artifacts.getRecord(photo.source_artifact_id);
-    if (!source) throw new Error(`Source Artifact ${photo.source_artifact_id} is missing`);
+    if (!source)
+      throw new Error(`Source Artifact ${photo.source_artifact_id} is missing`);
     const outputKey = objectKeys.normalizedPhoto({
       bookId: page.book_id,
       runId: page.run_id,
@@ -574,7 +615,11 @@ export class ProductionBookRun {
     const normalized = await this.images.normalize({
       pageId: page.page_id,
       operationId,
-      input: { artifactId: source.artifact_id, objectKey: source.object_key, sha256: source.sha256 },
+      input: {
+        artifactId: source.artifact_id,
+        objectKey: source.object_key,
+        sha256: source.sha256,
+      },
       output: { artifactId, objectKey: outputKey },
     });
     await this.artifacts.registerExternalImmutable({
@@ -590,7 +635,9 @@ export class ProductionBookRun {
       mimeType: normalized.artifact.mimeType,
       retentionClass: "derived",
       createdAt: this.now(),
-      relations: [{ sourceArtifactId: source.artifact_id, kind: "derived_from" }],
+      relations: [
+        { sourceArtifactId: source.artifact_id, kind: "derived_from" },
+      ],
     });
     await this.completeOperationStatement(
       operationId,
@@ -603,11 +650,14 @@ export class ProductionBookRun {
     stylePackVersion: string,
     remainingBytes: number
   ): Promise<Array<GeminiImagePart & { artifactId: string }>> {
-    const rows = await this.database.prepare(
-      `SELECT artifact_id FROM canonical_references
+    const rows = await this.database
+      .prepare(
+        `SELECT artifact_id FROM canonical_references
        WHERE style_pack_version = ? AND retired_at IS NULL
        ORDER BY style_pack_revision DESC LIMIT 2`
-    ).bind(stylePackVersion).all<{ artifact_id: string }>();
+      )
+      .bind(stylePackVersion)
+      .all<{ artifact_id: string }>();
     const references: Array<GeminiImagePart & { artifactId: string }> = [];
     for (const row of rows.results) {
       try {
@@ -628,13 +678,19 @@ export class ProductionBookRun {
   }
 
   private async requireStyleBible(stylePackVersion: string): Promise<string> {
-    const object = await this.bucket.get(objectKeys.styleBible(stylePackVersion));
+    const object = await this.bucket.get(
+      objectKeys.styleBible(stylePackVersion)
+    );
     if (!object) {
-      throw new Error(`Required style bible is missing for style pack ${stylePackVersion}`);
+      throw new Error(
+        `Required style bible is missing for style pack ${stylePackVersion}`
+      );
     }
     const styleBible = (await object.text()).trim();
     if (!styleBible) {
-      throw new Error(`Required style bible is empty for style pack ${stylePackVersion}`);
+      throw new Error(
+        `Required style bible is empty for style pack ${stylePackVersion}`
+      );
     }
     return styleBible.slice(0, 24_000);
   }
@@ -644,33 +700,63 @@ export class ProductionBookRun {
     pageId: string,
     semanticAttempt: number
   ): Promise<string | null> {
-    const regeneration = await this.database.prepare(
-      "SELECT feedback_json FROM book_run_regenerations WHERE new_run_id = ?"
-    ).bind(runId).first<{ feedback_json: string }>();
+    const regeneration = await this.database
+      .prepare(
+        "SELECT feedback_json FROM book_run_regenerations WHERE new_run_id = ?"
+      )
+      .bind(runId)
+      .first<{ feedback_json: string }>();
     const items: unknown[] = [];
     if (regeneration) {
-      try { items.push(JSON.parse(regeneration.feedback_json)); } catch { /* ignore malformed legacy data */ }
+      try {
+        items.push(JSON.parse(regeneration.feedback_json));
+      } catch {
+        /* ignore malformed legacy data */
+      }
     }
     if (semanticAttempt > 0) {
-      const prior = await this.database.prepare(
-        `SELECT c.candidate_id, q.status, q.overall_score, q.artifact_id
+      const prior = await this.database
+        .prepare(
+          `SELECT c.candidate_id, q.status, q.overall_score, q.artifact_id
          FROM candidates c JOIN operations o ON o.operation_id = c.operation_id
          JOIN qa_results q ON q.candidate_id = c.candidate_id AND q.qa_kind = 'style'
          WHERE c.page_id = ? AND o.semantic_attempt = ?
          ORDER BY q.overall_score DESC, c.ordinal LIMIT 1`
-      ).bind(pageId, semanticAttempt - 1).first<{
-        candidate_id: string; status: string; overall_score: number | null; artifact_id: string | null;
-      }>();
+        )
+        .bind(pageId, semanticAttempt - 1)
+        .first<{
+          candidate_id: string;
+          status: string;
+          overall_score: number | null;
+          artifact_id: string | null;
+        }>();
       if (prior) {
         let details: unknown;
         if (prior.artifact_id) {
-          try { details = JSON.parse(await (await this.artifacts.read(prior.artifact_id)).object.text()); } catch { /* status and score are still useful */ }
+          try {
+            details = JSON.parse(
+              await (await this.artifacts.read(prior.artifact_id)).object.text()
+            );
+          } catch {
+            /* status and score are still useful */
+          }
         }
-        const reviews = await this.database.prepare(
-          `SELECT decision, notes FROM reviews WHERE page_id = ? AND candidate_id = ?
+        const reviews = await this.database
+          .prepare(
+            `SELECT decision, notes FROM reviews WHERE page_id = ? AND candidate_id = ?
            ORDER BY created_at DESC LIMIT 5`
-        ).bind(pageId, prior.candidate_id).all<{ decision: string; notes: string | null }>();
-        items.push({ judgeFinding: { candidateId: prior.candidate_id, status: prior.status, score: prior.overall_score, details }, reviewerNotes: reviews.results });
+          )
+          .bind(pageId, prior.candidate_id)
+          .all<{ decision: string; notes: string | null }>();
+        items.push({
+          judgeFinding: {
+            candidateId: prior.candidate_id,
+            status: prior.status,
+            score: prior.overall_score,
+            details,
+          },
+          reviewerNotes: reviews.results,
+        });
       }
     }
     return items.length ? JSON.stringify(items).slice(0, 12_000) : null;
@@ -829,23 +915,38 @@ export class ProductionBookRun {
     if (run.provider === "gemini") {
       try {
         const prior = await this.artifacts.read(`style-qa:${candidateId}`);
-        existingEvaluation = JSON.parse(await prior.object.text()) as Record<string, unknown>;
+        existingEvaluation = JSON.parse(await prior.object.text()) as Record<
+          string,
+          unknown
+        >;
       } catch {
         existingEvaluation = undefined;
       }
     }
     if (run.provider === "gemini" && !existingEvaluation) {
-      if (!this.providerConfig.apiKey) throw new Error("Gemini API key is required for Style QA");
+      if (!this.providerConfig.apiKey)
+        throw new Error("Gemini API key is required for Style QA");
       const judgeCost = run.style_judge_cost_micros;
-      await this.database.prepare(
-        `INSERT INTO provider_attempts
+      await this.database
+        .prepare(
+          `INSERT INTO provider_attempts
          (provider_attempt_id, operation_id, run_id, provider, model, provider_request_id,
           infrastructure_attempt, semantic_attempt, status, estimated_cost_micros,
           actual_cost_micros, started_at, completed_at)
          VALUES (?, ?, ?, 'gemini', ?, ?, 1, ?, 'submitted', ?, NULL, ?, NULL)
          ON CONFLICT(operation_id, infrastructure_attempt) DO NOTHING`
-      ).bind(`provider:${operationId}:1`, operationId, run.run_id, model, operationId,
-        semanticAttempt, judgeCost, now).run();
+        )
+        .bind(
+          `provider:${operationId}:1`,
+          operationId,
+          run.run_id,
+          model,
+          operationId,
+          semanticAttempt,
+          judgeCost,
+          now
+        )
+        .run();
     }
     let judge: Record<string, unknown>;
     let score: number;
@@ -853,20 +954,32 @@ export class ProductionBookRun {
     if (run.provider === "gemini") {
       if (existingEvaluation) {
         score = Number(existingEvaluation.score);
-        recordedStatus = existingEvaluation.status === "passed" ? "passed" : "needs_review";
+        recordedStatus =
+          existingEvaluation.status === "passed" ? "passed" : "needs_review";
         judge = existingEvaluation;
       } else {
-        if (!this.providerConfig.apiKey) throw new Error("Gemini API key is required for Style QA");
-        if (!candidate.clean_artifact_id) throw new Error(`Clean candidate ${candidateId} is missing`);
+        if (!this.providerConfig.apiKey)
+          throw new Error("Gemini API key is required for Style QA");
+        if (!candidate.clean_artifact_id)
+          throw new Error(`Clean candidate ${candidateId} is missing`);
         const clean = await this.artifacts.read(candidate.clean_artifact_id);
-        const refs = await this.loadCanonicalReferenceImages(run.style_pack_version, 14 * 1024 * 1024 - clean.record.byte_size);
+        const refs = await this.loadCanonicalReferenceImages(
+          run.style_pack_version,
+          14 * 1024 * 1024 - clean.record.byte_size
+        );
         const styleBible = await this.requireStyleBible(run.style_pack_version);
         const evaluation = await judgeGeminiStyle({
           apiKey: this.providerConfig.apiKey,
           model,
-          candidate: { mimeType: clean.record.mime_type, bytes: await clean.object.arrayBuffer() },
+          candidate: {
+            mimeType: clean.record.mime_type,
+            bytes: await clean.object.arrayBuffer(),
+          },
           styleBible,
-          references: refs.map(ref => ({ mimeType: ref.mimeType, bytes: ref.bytes })),
+          references: refs.map(ref => ({
+            mimeType: ref.mimeType,
+            bytes: ref.bytes,
+          })),
         });
         const values = Object.values(evaluation.dimensions);
         score = values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -881,7 +994,8 @@ export class ProductionBookRun {
       score = mockStyleScore(run.execution_profile, semanticAttempt, slot);
       judge = { judge: "mock-style-v1" };
     }
-    const status = recordedStatus ?? (score >= STYLE_PASS_SCORE ? "passed" : "needs_review");
+    const status =
+      recordedStatus ?? (score >= STYLE_PASS_SCORE ? "passed" : "needs_review");
     const artifactId = `style-qa:${candidateId}`;
     await this.artifacts.putImmutable({
       artifactId,
@@ -897,7 +1011,9 @@ export class ProductionBookRun {
       }),
       artifactKind: "style_qa",
       schemaVersion: SCHEMA_VERSION,
-      body: new TextEncoder().encode(JSON.stringify({ candidateId, status, score, ...judge })),
+      body: new TextEncoder().encode(
+        JSON.stringify({ candidateId, status, score, ...judge })
+      ),
       mimeType: "application/json",
       provider: run.provider,
       model,
@@ -930,10 +1046,14 @@ export class ProductionBookRun {
       ),
     ];
     if (run.provider === "gemini") {
-      completionStatements.push(this.database.prepare(
-        `UPDATE provider_attempts SET status = 'succeeded', actual_cost_micros = ?, completed_at = ?
+      completionStatements.push(
+        this.database
+          .prepare(
+            `UPDATE provider_attempts SET status = 'succeeded', actual_cost_micros = ?, completed_at = ?
          WHERE operation_id = ? AND infrastructure_attempt = 1 AND actual_cost_micros IS NULL`
-      ).bind(run.style_judge_cost_micros, now, operationId));
+          )
+          .bind(run.style_judge_cost_micros, now, operationId)
+      );
     }
     await this.database.batch(completionStatements);
   }

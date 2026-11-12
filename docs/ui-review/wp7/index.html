@@ -1,45 +1,434 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>WP7 · Pictobook review dashboard</title>
-  <style>
-    :root{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#25382f;background:#f4f5f1}*{box-sizing:border-box}body{margin:0}.hero{padding:48px max(32px,calc((100% - 1240px)/2));background:#203a31;color:#f4f6f2}.eyebrow{text-transform:uppercase;letter-spacing:1.5px;font-size:11px;color:#c4d3ca;font-weight:750}.hero h1{font:500 42px/1.1 Georgia,serif;margin:12px 0}.hero p{max-width:720px;color:#d1ddd5;line-height:1.6;font-size:14px}.meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}.meta span{font-size:11px;border:1px solid #557064;border-radius:30px;padding:7px 10px;color:#e2ebe5}.wrap{max-width:1240px;margin:34px auto 70px;padding:0 24px}.group{margin:30px 0}.group h2{font:500 25px Georgia,serif;margin:0 0 13px}.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.card{background:#fff;border:1px solid #e0e6df;border-radius:12px;overflow:hidden;box-shadow:0 4px 15px #23372e0a}.card img{display:block;width:100%;height:auto;border-bottom:1px solid #e8ece7}.caption{padding:14px 16px 16px}.caption h3{font-size:14px;margin:0 0 7px}.caption p{font-size:12px;line-height:1.5;color:#708076;margin:0}.tags{display:flex;gap:7px;margin-top:11px}.tags span{font-size:10px;background:#eef2ed;color:#5b6b61;padding:5px 8px;border-radius:20px}.note{background:#fff;border:1px solid #e0e6df;border-radius:12px;padding:18px 20px;color:#66766c;font-size:13px;line-height:1.6}a{color:#315849}footer{padding:0 24px 30px;text-align:center;color:#87948c;font-size:11px}@media(max-width:800px){.cards{grid-template-columns:1fr}.hero{padding:32px 24px}.hero h1{font-size:34px}}
-  </style>
-</head>
-<body>
-  <header class="hero">
-    <div class="eyebrow">Pictobook · Implementation review</div>
-    <h1>Cloudflare QA dashboard</h1>
-    <p>WP7 connects the local reviewer workspace to the authenticated Cloudflare API. Follow the review flow from owned books through page QA, exact-candidate approval, bounded regeneration, and canonical promotion.</p>
-    <div class="meta"><span>WP7 · Complete</span><span>Desktop viewport · 1440 × 1250</span><span>Synthetic fixtures · wp7-synthetic-v1</span><span>14 screen states</span></div>
-  </header>
-  <main class="wrap">
-    <section class="group"><h2>1. Find the run</h2><div class="cards">
-      <article class="card"><a href="screenshots/books.png"><img src="screenshots/books.png" alt="Books list with three synthetic books"></a><div class="caption"><h3>Books · populated</h3><p>Start from the reviewer’s owner-scoped book list. Status and run counts help select the work to inspect.</p><div class="tags"><span>Normal state</span><span>wp7-synthetic-v1</span><span>1440 × 1250</span></div></div></article>
-      <article class="card"><a href="screenshots/books-empty.png"><img src="screenshots/books-empty.png" alt="Empty book list"></a><div class="caption"><h3>Books · empty</h3><p>New or unused workspace with no books available for review.</p><div class="tags"><span>Empty state</span><span>wp7-synthetic-v1</span><span>1440 × 1250</span></div></div></article>
-      <article class="card"><a href="screenshots/book-runs.png"><img src="screenshots/book-runs.png" alt="Book run list"></a><div class="caption"><h3>Book Runs · populated</h3><p>Compare run status, style pack, spend, and creation date before opening a run.</p><div class="tags"><span>Normal state</span><span>wp7-synthetic-v1</span><span>1440 × 1250</span></div></div></article>
-      <article class="card"><a href="screenshots/book-runs-empty.png"><img src="screenshots/book-runs-empty.png" alt="Empty book run list"></a><div class="caption"><h3>Book Runs · empty</h3><p>A book with no pipeline runs yet.</p><div class="tags"><span>Empty state</span><span>wp7-synthetic-v1</span><span>1440 × 1250</span></div></div></article>
-    </div></section>
-    <section class="group"><h2>2. Inspect page quality</h2><div class="cards">
-      <article class="card"><a href="screenshots/run.png"><img src="screenshots/run.png" alt="Run overview with approved and needs-review pages"></a><div class="caption"><h3>Run overview · mixed outcomes</h3><p>Print QA and Style QA remain separate. The automatically approved page appears first, with pending human review and canonical references below.</p><div class="tags"><span>Run state</span><span>wp7-synthetic-v1</span><span>1440 × 1250</span></div></div></article>
-      <article class="card"><a href="screenshots/page.png"><img src="screenshots/page.png" alt="Page candidate review with source image and QA results"></a><div class="caption"><h3>Page review · repair candidate</h3><p>Shows the original source, repair round, candidate list, separate QA results, reviewer notes, and available actions.</p><div class="tags"><span>Needs review</span><span>wp7-synthetic-v1</span><span>1440 × 1250</span></div></div></article>
-      <article class="card"><a href="screenshots/brief.png"><img src="screenshots/brief.png" alt="Page review with generation brief expanded"></a><div class="caption"><h3>Page review · brief expanded</h3><p>The page brief is available on demand alongside the source and the candidate it informed.</p><div class="tags"><span>Brief detail</span><span>wp7-synthetic-v1</span><span>1440 × 1250</span></div></div></article>
-    </div></section>
-    <section class="group"><h2>3. Decide and follow through</h2><div class="cards">
-      <article class="card"><a href="screenshots/review-confirm.png"><img src="screenshots/review-confirm.png" alt="Human approval confirmation dialog"></a><div class="caption"><h3>Human review · confirmation</h3><p>The reviewer confirms the exact candidate before the approval mutation is sent.</p><div class="tags"><span>Confirmation</span><span>wp7-synthetic-v1</span><span>1440 × 1250</span></div></div></article>
-      <article class="card"><a href="screenshots/human-approved.png"><img src="screenshots/human-approved.png" alt="Page with human-approved candidate selected first"></a><div class="caption"><h3>Human review · approved</h3><p>After refresh, the approved candidate is primary and repeat approval is disabled.</p><div class="tags"><span>Approved</span><span>wp7-synthetic-v1</span><span>1440 × 1250</span></div></div></article>
-      <article class="card"><a href="screenshots/regeneration.png"><img src="screenshots/regeneration.png" alt="Regeneration confirmation dialog"></a><div class="caption"><h3>Regeneration · queued</h3><p>Starts a fresh bounded run from the original source photo. The current preview API records the source link; QA findings and reviewer notes are not yet added to the image request.</p><div class="tags"><span>Regeneration</span><span>wp7-synthetic-v1</span><span>1440 × 1250</span></div></div></article>
-      <article class="card"><a href="screenshots/canonical.png"><img src="screenshots/canonical.png" alt="Canonical promotion confirmation dialog"></a><div class="caption"><h3>Canonical promotion · confirmation</h3><p>Promotes the approved candidate into the active style pack as a new reference revision.</p><div class="tags"><span>Confirmation</span><span>wp7-synthetic-v1</span><span>1440 × 1250</span></div></div></article>
-      <article class="card"><a href="screenshots/canonical-added.png"><img src="screenshots/canonical-added.png" alt="Run overview showing newly added canonical reference"></a><div class="caption"><h3>Canonical promotion · added</h3><p>The resulting reference revision appears in the run’s style reference summary.</p><div class="tags"><span>Result state</span><span>wp7-synthetic-v1</span><span>1440 × 1250</span></div></div></article>
-    </div></section>
-    <section class="group"><h2>4. Async API states</h2><div class="cards">
-      <article class="card"><a href="screenshots/loading.png"><img src="screenshots/loading.png" alt="Dashboard loading state"></a><div class="caption"><h3>Loading</h3><p>Initial reviewer workspace read while the authenticated API request is pending.</p><div class="tags"><span>Loading state</span><span>wp7-synthetic-v1</span><span>1440 × 1250</span></div></div></article>
-      <article class="card"><a href="screenshots/error.png"><img src="screenshots/error.png" alt="Dashboard API error state"></a><div class="caption"><h3>API error</h3><p>Friendly retry state when the Worker API cannot be reached or credentials are unavailable.</p><div class="tags"><span>Error state</span><span>wp7-synthetic-v1</span><span>1440 × 1250</span></div></div></article>
-    </div></section>
-    <div class="note">All artwork and records are synthetic. The screenshots are visual review artifacts; they never call a mutation or include private customer material. For setup and implementation notes, see <a href="../../cloudflare-wp7-review-dashboard.md">the WP7 report</a>.</div>
-  </main>
-  <footer>Pictobook · WP7 visual review</footer>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WP7 · Pictobook review dashboard</title>
+    <style>
+      :root {
+        font-family:
+          Inter,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        color: #25382f;
+        background: #f4f5f1;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+      }
+      .hero {
+        padding: 48px max(32px, calc((100% - 1240px) / 2));
+        background: #203a31;
+        color: #f4f6f2;
+      }
+      .eyebrow {
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        font-size: 11px;
+        color: #c4d3ca;
+        font-weight: 750;
+      }
+      .hero h1 {
+        font:
+          500 42px/1.1 Georgia,
+          serif;
+        margin: 12px 0;
+      }
+      .hero p {
+        max-width: 720px;
+        color: #d1ddd5;
+        line-height: 1.6;
+        font-size: 14px;
+      }
+      .meta {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 20px;
+      }
+      .meta span {
+        font-size: 11px;
+        border: 1px solid #557064;
+        border-radius: 30px;
+        padding: 7px 10px;
+        color: #e2ebe5;
+      }
+      .wrap {
+        max-width: 1240px;
+        margin: 34px auto 70px;
+        padding: 0 24px;
+      }
+      .group {
+        margin: 30px 0;
+      }
+      .group h2 {
+        font:
+          500 25px Georgia,
+          serif;
+        margin: 0 0 13px;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid #e0e6df;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 15px #23372e0a;
+      }
+      .card img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-bottom: 1px solid #e8ece7;
+      }
+      .caption {
+        padding: 14px 16px 16px;
+      }
+      .caption h3 {
+        font-size: 14px;
+        margin: 0 0 7px;
+      }
+      .caption p {
+        font-size: 12px;
+        line-height: 1.5;
+        color: #708076;
+        margin: 0;
+      }
+      .tags {
+        display: flex;
+        gap: 7px;
+        margin-top: 11px;
+      }
+      .tags span {
+        font-size: 10px;
+        background: #eef2ed;
+        color: #5b6b61;
+        padding: 5px 8px;
+        border-radius: 20px;
+      }
+      .note {
+        background: #fff;
+        border: 1px solid #e0e6df;
+        border-radius: 12px;
+        padding: 18px 20px;
+        color: #66766c;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      a {
+        color: #315849;
+      }
+      footer {
+        padding: 0 24px 30px;
+        text-align: center;
+        color: #87948c;
+        font-size: 11px;
+      }
+      @media (max-width: 800px) {
+        .cards {
+          grid-template-columns: 1fr;
+        }
+        .hero {
+          padding: 32px 24px;
+        }
+        .hero h1 {
+          font-size: 34px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="hero">
+      <div class="eyebrow">Pictobook · Implementation review</div>
+      <h1>Cloudflare QA dashboard</h1>
+      <p>
+        WP7 connects the local reviewer workspace to the authenticated
+        Cloudflare API. Follow the review flow from owned books through page QA,
+        exact-candidate approval, bounded regeneration, and canonical promotion.
+      </p>
+      <div class="meta">
+        <span>WP7 · Complete</span><span>Desktop viewport · 1440 × 1250</span
+        ><span>Synthetic fixtures · wp7-synthetic-v1</span
+        ><span>14 screen states</span>
+      </div>
+    </header>
+    <main class="wrap">
+      <section class="group">
+        <h2>1. Find the run</h2>
+        <div class="cards">
+          <article class="card">
+            <a href="screenshots/books.png"
+              ><img
+                src="screenshots/books.png"
+                alt="Books list with three synthetic books"
+            /></a>
+            <div class="caption">
+              <h3>Books · populated</h3>
+              <p>
+                Start from the reviewer’s owner-scoped book list. Status and run
+                counts help select the work to inspect.
+              </p>
+              <div class="tags">
+                <span>Normal state</span><span>wp7-synthetic-v1</span
+                ><span>1440 × 1250</span>
+              </div>
+            </div>
+          </article>
+          <article class="card">
+            <a href="screenshots/books-empty.png"
+              ><img src="screenshots/books-empty.png" alt="Empty book list"
+            /></a>
+            <div class="caption">
+              <h3>Books · empty</h3>
+              <p>New or unused workspace with no books available for review.</p>
+              <div class="tags">
+                <span>Empty state</span><span>wp7-synthetic-v1</span
+                ><span>1440 × 1250</span>
+              </div>
+            </div>
+          </article>
+          <article class="card">
+            <a href="screenshots/book-runs.png"
+              ><img src="screenshots/book-runs.png" alt="Book run list"
+            /></a>
+            <div class="caption">
+              <h3>Book Runs · populated</h3>
+              <p>
+                Compare run status, style pack, spend, and creation date before
+                opening a run.
+              </p>
+              <div class="tags">
+                <span>Normal state</span><span>wp7-synthetic-v1</span
+                ><span>1440 × 1250</span>
+              </div>
+            </div>
+          </article>
+          <article class="card">
+            <a href="screenshots/book-runs-empty.png"
+              ><img
+                src="screenshots/book-runs-empty.png"
+                alt="Empty book run list"
+            /></a>
+            <div class="caption">
+              <h3>Book Runs · empty</h3>
+              <p>A book with no pipeline runs yet.</p>
+              <div class="tags">
+                <span>Empty state</span><span>wp7-synthetic-v1</span
+                ><span>1440 × 1250</span>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+      <section class="group">
+        <h2>2. Inspect page quality</h2>
+        <div class="cards">
+          <article class="card">
+            <a href="screenshots/run.png"
+              ><img
+                src="screenshots/run.png"
+                alt="Run overview with approved and needs-review pages"
+            /></a>
+            <div class="caption">
+              <h3>Run overview · mixed outcomes</h3>
+              <p>
+                Print QA and Style QA remain separate. The automatically
+                approved page appears first, with pending human review and
+                canonical references below.
+              </p>
+              <div class="tags">
+                <span>Run state</span><span>wp7-synthetic-v1</span
+                ><span>1440 × 1250</span>
+              </div>
+            </div>
+          </article>
+          <article class="card">
+            <a href="screenshots/page.png"
+              ><img
+                src="screenshots/page.png"
+                alt="Page candidate review with source image and QA results"
+            /></a>
+            <div class="caption">
+              <h3>Page review · repair candidate</h3>
+              <p>
+                Shows the original source, repair round, candidate list,
+                separate QA results, reviewer notes, and available actions.
+              </p>
+              <div class="tags">
+                <span>Needs review</span><span>wp7-synthetic-v1</span
+                ><span>1440 × 1250</span>
+              </div>
+            </div>
+          </article>
+          <article class="card">
+            <a href="screenshots/brief.png"
+              ><img
+                src="screenshots/brief.png"
+                alt="Page review with generation brief expanded"
+            /></a>
+            <div class="caption">
+              <h3>Page review · brief expanded</h3>
+              <p>
+                The page brief is available on demand alongside the source and
+                the candidate it informed.
+              </p>
+              <div class="tags">
+                <span>Brief detail</span><span>wp7-synthetic-v1</span
+                ><span>1440 × 1250</span>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+      <section class="group">
+        <h2>3. Decide and follow through</h2>
+        <div class="cards">
+          <article class="card">
+            <a href="screenshots/review-confirm.png"
+              ><img
+                src="screenshots/review-confirm.png"
+                alt="Human approval confirmation dialog"
+            /></a>
+            <div class="caption">
+              <h3>Human review · confirmation</h3>
+              <p>
+                The reviewer confirms the exact candidate before the approval
+                mutation is sent.
+              </p>
+              <div class="tags">
+                <span>Confirmation</span><span>wp7-synthetic-v1</span
+                ><span>1440 × 1250</span>
+              </div>
+            </div>
+          </article>
+          <article class="card">
+            <a href="screenshots/human-approved.png"
+              ><img
+                src="screenshots/human-approved.png"
+                alt="Page with human-approved candidate selected first"
+            /></a>
+            <div class="caption">
+              <h3>Human review · approved</h3>
+              <p>
+                After refresh, the approved candidate is primary and repeat
+                approval is disabled.
+              </p>
+              <div class="tags">
+                <span>Approved</span><span>wp7-synthetic-v1</span
+                ><span>1440 × 1250</span>
+              </div>
+            </div>
+          </article>
+          <article class="card">
+            <a href="screenshots/regeneration.png"
+              ><img
+                src="screenshots/regeneration.png"
+                alt="Regeneration confirmation dialog"
+            /></a>
+            <div class="caption">
+              <h3>Regeneration · queued</h3>
+              <p>
+                Starts a fresh bounded run from the original source photo. The
+                current preview API records the source link; QA findings and
+                reviewer notes are not yet added to the image request.
+              </p>
+              <div class="tags">
+                <span>Regeneration</span><span>wp7-synthetic-v1</span
+                ><span>1440 × 1250</span>
+              </div>
+            </div>
+          </article>
+          <article class="card">
+            <a href="screenshots/canonical.png"
+              ><img
+                src="screenshots/canonical.png"
+                alt="Canonical promotion confirmation dialog"
+            /></a>
+            <div class="caption">
+              <h3>Canonical promotion · confirmation</h3>
+              <p>
+                Promotes the approved candidate into the active style pack as a
+                new reference revision.
+              </p>
+              <div class="tags">
+                <span>Confirmation</span><span>wp7-synthetic-v1</span
+                ><span>1440 × 1250</span>
+              </div>
+            </div>
+          </article>
+          <article class="card">
+            <a href="screenshots/canonical-added.png"
+              ><img
+                src="screenshots/canonical-added.png"
+                alt="Run overview showing newly added canonical reference"
+            /></a>
+            <div class="caption">
+              <h3>Canonical promotion · added</h3>
+              <p>
+                The resulting reference revision appears in the run’s style
+                reference summary.
+              </p>
+              <div class="tags">
+                <span>Result state</span><span>wp7-synthetic-v1</span
+                ><span>1440 × 1250</span>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+      <section class="group">
+        <h2>4. Async API states</h2>
+        <div class="cards">
+          <article class="card">
+            <a href="screenshots/loading.png"
+              ><img src="screenshots/loading.png" alt="Dashboard loading state"
+            /></a>
+            <div class="caption">
+              <h3>Loading</h3>
+              <p>
+                Initial reviewer workspace read while the authenticated API
+                request is pending.
+              </p>
+              <div class="tags">
+                <span>Loading state</span><span>wp7-synthetic-v1</span
+                ><span>1440 × 1250</span>
+              </div>
+            </div>
+          </article>
+          <article class="card">
+            <a href="screenshots/error.png"
+              ><img src="screenshots/error.png" alt="Dashboard API error state"
+            /></a>
+            <div class="caption">
+              <h3>API error</h3>
+              <p>
+                Friendly retry state when the Worker API cannot be reached or
+                credentials are unavailable.
+              </p>
+              <div class="tags">
+                <span>Error state</span><span>wp7-synthetic-v1</span
+                ><span>1440 × 1250</span>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+      <div class="note">
+        All artwork and records are synthetic. The screenshots are visual review
+        artifacts; they never call a mutation or include private customer
+        material. For setup and implementation notes, see
+        <a href="../../cloudflare-wp7-review-dashboard.md">the WP7 report</a>.
+      </div>
+    </main>
+    <footer>Pictobook · WP7 visual review</footer>
+  </body>
 </html>
