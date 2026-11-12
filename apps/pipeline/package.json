@@ -1,0 +1,29 @@
+{
+  "name": "pipeline",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "catalog-refresh": "tsc -p tsconfig.json && node dist/catalogRefreshCli.js",
+    "canonical-style-qa": "tsc -p tsconfig.json && node dist/canonicalStyleQaCli.js",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "dashboard": "tsc -p tsconfig.json && node dist/dashboard.js",
+    "dashboard:cloudflare": "node cloudflare-dashboard.mjs",
+    "dashboard:cloudflare:preview": "node --env-file=../pipeline-cloudflare/.env.preview cloudflare-dashboard.mjs --require-api",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "prototype": "tsc -p tsconfig.json && node dist/cli.js",
+    "style-qa": "tsc -p tsconfig.json && node dist/styleQaCli.js",
+    "style-auto-repair": "tsc -p tsconfig.json && node dist/autoStyleRepairCli.js",
+    "style-retry": "tsc -p tsconfig.json && node dist/styleRetryCli.js",
+    "test": "tsc -p tsconfig.json && node --test dist/*.test.js dist/core/*.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.0",
+    "typescript": "5.6.3"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.7",
+    "sharp": "^0.35.5"
+  }
+}

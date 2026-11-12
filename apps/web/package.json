@@ -1,0 +1,20 @@
+{
+  "name": "web",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4176",
+    "api-docs": "node ./scripts/serve-api-docs.mjs",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4176"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.107.1",
+    "@tanstack/react-router": "^1.170.46",
+    "@vitejs/plugin-react": "^5.0.4",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "vite": "^7.1.7"
+  }
+}
