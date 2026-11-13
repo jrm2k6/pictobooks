@@ -46,7 +46,7 @@ fulfillment are connected.
 
 | Flow     | Screen                       | Screenshot                               |
 | -------- | ---------------------------- | ---------------------------------------- |
-| Account  | Production login landing    | [View](screenshots/login.png)            |
+| Account  | Production login landing     | [View](screenshots/login.png)            |
 | Start    | My books                     | [View](screenshots/library.png)          |
 | Start    | First visit / empty library  | [View](screenshots/empty.png)            |
 | Account  | Sign in or create an account | [View](screenshots/account.png)          |
