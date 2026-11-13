@@ -104,20 +104,18 @@ and reviewer notes in `book_run_regenerations.feedback_json`; the workflow sends
 that feedback to the image provider. The snapshot keeps the regeneration
 reproducible if the source page receives later reviews.
 
-Preview is configured for Gemini, but the API rejects new runs until the key
-exists. First apply the new migrations to preview D1, then add the key. Wrangler
-deploys a new Worker version immediately when `secret put` succeeds:
+Preview is configured for Gemini. Before starting a real provider run, verify
+that the key name is present on the preview Worker:
 
 ```bash
-pnpm --filter pipeline-cloudflare exec wrangler d1 migrations apply \
-  PIPELINE_DB --remote --env preview
-pnpm --filter pipeline-cloudflare exec wrangler secret put GEMINI_API_KEY \
-  --env preview
+pnpm --filter pipeline-cloudflare exec wrangler secret list --env preview
 ```
 
-Wrangler prompts for the key; enter it there rather than in a shell command or
-chat. `GEMINI_IMAGE_MODEL`, `GEMINI_VISION_MODEL`, and candidate cost estimates
-are configured in `wrangler.jsonc`. The configured image model is Nano Banana
+The command lists names and types, not values. If the key is absent, add it with
+`wrangler secret put GEMINI_API_KEY --env preview`; enter the value at Wrangler's
+prompt instead of placing it in a shell command or chat. `GEMINI_IMAGE_MODEL`,
+`GEMINI_VISION_MODEL`, and candidate cost estimates are configured in
+`wrangler.jsonc`. The configured image model is Nano Banana
 2.1, matching the local pipeline. Its 2K image output is listed at $0.0504;
 text and image input tokens are billed separately. The current budget estimates
 are 65,000 micros per generated candidate and 10,000 micros per Style QA. These

@@ -106,6 +106,10 @@ jspm_packages/
 tmp/
 temp/
 
+# Local family photos and generated canonical-reference catalog
+/samples/
+/catalog/
+
 # Database
 *.db
 *.sqlite

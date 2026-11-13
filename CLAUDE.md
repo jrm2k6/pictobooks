@@ -1,83 +1,28 @@
-# Pictobook
+# Agent instructions
 
-Landing page for Pictobook — a service that turns family photos into personalized coloring books for kids (ages 3–12).
+Use the root [README](README.md) for the current monorepo map, installation,
+environment setup, local commands, and documentation links. App-specific
+instructions belong in that app's README.
 
-## Tech Stack
+## Repository guardrails
 
-- **React 19** + **TypeScript**
-- **Vite 7** (dev server + static bundler)
-- **Tailwind CSS v4** (via `@tailwindcss/vite` plugin)
-- **shadcn/ui** components (in `apps/landing/src/components/ui/`)
-- **wouter** for routing
-- **sonner** for toast notifications
-- **framer-motion** for animations
-- **pnpm workspaces** as package manager
+- Run commands from the repository root and target workspace packages with
+  `pnpm --filter <package> ...` unless an app README says otherwise.
+- Do not commit family photos, generated canonical-reference images, local run
+  data, or secrets. Keep local photo inputs under the ignored root `samples/`
+  directory and generated references under the ignored root `catalog/`.
+- Keep frontend `VITE_*` values public; never place credentials in frontend
+  variables, committed examples, or Wrangler configuration.
+- Use the app's local Wrangler configuration for offline/local work. Treat a
+  Wrangler environment such as `preview` as remote and use it only when the task
+  explicitly calls for remote Cloudflare resources. For Cloudflare tasks, use
+  the project-local Wrangler configuration when present; otherwise use `cf`.
+- Preserve unrelated working-tree changes and inspect `git status --short`
+  before staging files.
 
-## Project Structure
+## Landing page design system
 
-```
-pictobook/
-├── apps/
-│   ├── landing/          # Vite + React landing page
-│   │   ├── index.html
-│   │   ├── src/
-│   │   │   ├── main.tsx        # React root mount
-│   │   │   ├── App.tsx         # Router + providers
-│   │   │   ├── pages/Home.tsx  # Landing page (main file to edit)
-│   │   │   ├── index.css       # Design system / Tailwind config
-│   │   │   └── components/ui/  # shadcn/ui components
-│   │   ├── vite.config.ts
-│   │   └── package.json
-│   ├── web/              # Placeholder (future React app)
-│   └── api/              # Placeholder (Rails API)
-├── packages/
-│   └── shared/           # Shared constants (@pictobook/shared)
-│       └── src/const.ts
-├── patches/              # pnpm patches (wouter)
-├── pnpm-workspace.yaml
-├── package.json          # Workspace root
-└── tsconfig.json         # Base TypeScript config
-```
-
-## Commands
-
-```bash
-# Landing page
-pnpm --filter landing dev      # Start dev server at http://localhost:3000
-pnpm --filter landing build    # Build static output to apps/landing/dist/
-pnpm --filter landing preview  # Preview the production build locally
-pnpm --filter landing check    # TypeScript type check
-
-# Root
-pnpm format                    # Prettier format across all packages
-
-# Rails API (future)
-cd apps/api && bin/rails server
-cd apps/api && bundle exec rails console
-```
-
-## Design System
-
-- **Palette**: Coral `oklch(0.65 0.18 30)` · Navy `oklch(0.22 0.04 255)` · Gold `oklch(0.88 0.15 85)` · Off-white `oklch(0.99 0.005 80)`
-- **Fonts**: Fraunces (display/headings) · Plus Jakarta Sans (body) — loaded from Google Fonts in `apps/landing/index.html`
-- Custom CSS classes: `.btn-coral`, `.btn-navy`, `.blob-morph`, `.float-anim`, `.step-number` — defined in `apps/landing/src/index.css`
-
-## Key Notes
-
-- The waitlist form in `Home.tsx` (`WaitlistForm` component) currently uses a fake handler. A real email collection integration is TBD.
-- Static deployment: deploy the `apps/landing/dist/` folder after `pnpm --filter landing build`. Platform TBD.
-- `apps/web/` and `apps/api/` are placeholders for future packages.
-- Path alias `@shared/*` maps to `packages/shared/src/*` in the landing app.
-
-## Environment Files
-
-- `apps/landing/.env.*` is used by Vite in the landing app. Put `VITE_*` keys here.
-- Root `.env.*` is for backend/runtime scripts (worker/dbmate), not for Vite frontend env loading.
-- Quick start for local waitlist setup:
-
-```bash
-cp apps/landing/.env.example apps/landing/.env.development
-cp .env.example .env.development
-```
-
-Then fill in both files and restart the landing dev server.
+- Palette: Coral `oklch(0.65 0.18 30)`, Navy `oklch(0.22 0.04 255)`, Gold
+  `oklch(0.88 0.15 85)`, Off-white `oklch(0.99 0.005 80)`.
+- Fonts: Fraunces for headings and Plus Jakarta Sans for body text.
+- Landing-page utility classes are defined in `apps/landing/src/index.css`.
