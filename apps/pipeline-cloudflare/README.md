@@ -21,7 +21,7 @@ endpoint. The old standalone Docker command no longer exercises the real
 boundary because it has no object store shared with the Worker's locally emulated
 R2 binding. Use the credential-free Container tests locally, then the isolated
 remote smoke documented in the
-[WP4 report](../../docs/cloudflare-wp4-node-image-container.md). Do not point a
+[ADR 0008](../../docs/adr/0008-stateless-image-container.md). Do not point a
 local Worker at a production bucket.
 
 ## Production state-model tests
@@ -34,7 +34,7 @@ and object keys without touching remote resources:
 pnpm --filter pipeline-cloudflare test
 ```
 
-See [the WP2 state-model report](../../docs/cloudflare-wp2-state-model.md) for
+See [ADR 0006](../../docs/adr/0006-d1-pipeline-state-model.md) for
 the enforced invariants and schema boundaries.
 The [D1 schema reference](../../docs/cloudflare-d1-schema.md) documents every
 table, relationship, Page state, and end-to-end data flow.
@@ -42,7 +42,7 @@ table, relationship, Page state, and end-to-end data flow.
 WP3's R2 Artifact Adapter is covered by the same test command. The tests run
 against isolated local Worker-runtime R2 and D1 bindings; they do not access the
 remote development bucket or database. See the
-[WP3 storage report](../../docs/cloudflare-wp3-r2-artifact-storage.md).
+[ADR 0007](../../docs/adr/0007-private-immutable-r2-artifacts.md).
 
 WP4's Node Container tests cover normalize/cleanup/Print QA equivalence,
 immutable replays, and crash recovery:
@@ -51,7 +51,7 @@ immutable replays, and crash recovery:
 pnpm --filter pipeline-image-worker test
 ```
 
-The [WP4 report](../../docs/cloudflare-wp4-node-image-container.md) also defines
+The [ADR 0008](../../docs/adr/0008-stateless-image-container.md) also defines
 the guarded local-to-preview and explicit production infrastructure smoke flow.
 
 ## WP5 Book Run Workflow
@@ -68,7 +68,7 @@ pnpm --filter pipeline-cloudflare smoke:book-run:preview -- \
 
 The smoke command reads the ignored `.env.preview` file. It creates only
 synthetic data in the dedicated preview resources. See the
-[WP5 report](../../docs/cloudflare-wp5-book-run-workflow.md) for replay,
+[ADR 0009](../../docs/adr/0009-durable-book-run-workflow.md) for replay,
 automatic approval, repair, and budget semantics.
 
 ## WP6 authenticated API
@@ -85,7 +85,7 @@ pnpm --filter pipeline-cloudflare smoke:api:preview
 
 The preview smoke session is test-only. Session issuance for real accounts will
 be owned by the eventual identity provider. See the
-[WP6 report](../../docs/cloudflare-wp6-authenticated-api.md) for the route and
+[ADR 0010](../../docs/adr/0010-provider-neutral-owner-scoped-api.md) for the route and
 security contracts.
 
 ## WP8 Gemini image generation and Style QA

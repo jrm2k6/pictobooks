@@ -1,9 +1,15 @@
-# WP2: D1 pipeline state model
+---
+status: accepted
+---
 
-Status: complete (2026-11-07)
+# Use D1 as the authority for pipeline state and invariants
+
+## Decision
+
+The production workflow needs durable, queryable state and replay-safe transitions. We decided to keep Books, Runs, Pages, operations, candidates, QA, repairs, and reviews in D1, enforce critical transition and budget invariants there, and preserve the original spike tables during migration.
 
 For the complete table catalogue, relationship map, Page state machine, and
-data-flow diagrams, see the [D1 schema reference](./cloudflare-d1-schema.md).
+data-flow diagrams, see the [D1 schema reference](../cloudflare-d1-schema.md).
 
 ## Result
 

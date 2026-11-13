@@ -1,6 +1,12 @@
-# WP4: Node image Container
+---
+status: accepted
+---
 
-Status: complete as of 2026-11-08.
+# Run image processing in a stateless Container data plane
+
+## Decision
+
+The existing Node and Sharp workload does not belong in the Worker control plane. We decided that Containers receive operation and artifact identifiers, read and write image bytes directly through R2’s S3-compatible API, and return metadata; Container-local files and memory are disposable. This refines the execution boundary in [ADR 0002](./0002-cloudflare-production-platform.md).
 
 ## Outcome
 

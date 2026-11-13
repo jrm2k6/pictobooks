@@ -1,8 +1,16 @@
-# WP0 Cloudflare Platform Validation Report
+---
+status: accepted
+---
+
+# Validate Cloudflare platform assumptions before productionization
+
+## Decision
+
+The initial platform spike demonstrated local and hosted Workers, D1, R2, Workflows, Durable Objects, and Containers with Node and Sharp. We decided to proceed with Cloudflare for the production pipeline, while treating the spike as platform validation rather than proof of production readiness. This records the evidence behind the platform choice in [ADR 0002](./0002-cloudflare-production-platform.md).
 
 Validation date: 2026-11-07
 
-## Decision
+## Validation evidence
 
 **Go for the Cloudflare platform architecture.**
 

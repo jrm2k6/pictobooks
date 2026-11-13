@@ -1,6 +1,12 @@
-# WP3: R2 Artifact storage
+---
+status: accepted
+---
 
-Status: complete (2026-11-08)
+# Store pipeline artifacts as private immutable R2 objects
+
+## Decision
+
+Pipeline images and other large artifacts need durable storage, integrity checks, and safe replay. We decided to store artifact bytes in private R2, keep metadata and provenance in D1, and reject writes that conflict with an existing immutable artifact identity. This refines the storage boundary in [ADR 0002](./0002-cloudflare-production-platform.md).
 
 ## Result
 
