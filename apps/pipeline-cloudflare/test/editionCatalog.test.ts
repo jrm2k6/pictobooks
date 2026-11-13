@@ -7,7 +7,7 @@ describe("local edition catalog", () => {
 
     expect(result.currency).toBe("USD");
     expect(result.editions).toHaveLength(2);
-    expect(result.editions.map((edition) => edition.format)).toEqual([
+    expect(result.editions.map(edition => edition.format)).toEqual([
       "pdf",
       "print",
     ]);

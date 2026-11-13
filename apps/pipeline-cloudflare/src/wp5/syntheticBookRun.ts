@@ -117,45 +117,51 @@ export const readBookRunStatus = async (
     .bind(runId)
     .first();
   if (!run) return null;
-  const [pages, candidates, qaResults, providerAttempts, repairRounds, reviews] =
-    await Promise.all([
-      env.PIPELINE_DB.prepare(
-        "SELECT * FROM pages WHERE run_id = ? ORDER BY page_id"
-      )
-        .bind(runId)
-        .all(),
-      env.PIPELINE_DB.prepare(
-        `SELECT c.* FROM candidates c JOIN pages p ON p.page_id = c.page_id
+  const [
+    pages,
+    candidates,
+    qaResults,
+    providerAttempts,
+    repairRounds,
+    reviews,
+  ] = await Promise.all([
+    env.PIPELINE_DB.prepare(
+      "SELECT * FROM pages WHERE run_id = ? ORDER BY page_id"
+    )
+      .bind(runId)
+      .all(),
+    env.PIPELINE_DB.prepare(
+      `SELECT c.* FROM candidates c JOIN pages p ON p.page_id = c.page_id
          WHERE p.run_id = ? ORDER BY c.page_id, c.ordinal`
-      )
-        .bind(runId)
-        .all(),
-      env.PIPELINE_DB.prepare(
-        `SELECT q.* FROM qa_results q
+    )
+      .bind(runId)
+      .all(),
+    env.PIPELINE_DB.prepare(
+      `SELECT q.* FROM qa_results q
          JOIN candidates c ON c.candidate_id = q.candidate_id
          JOIN pages p ON p.page_id = c.page_id
          WHERE p.run_id = ? ORDER BY q.candidate_id, q.qa_kind`
-      )
-        .bind(runId)
-        .all(),
-      env.PIPELINE_DB.prepare(
-        "SELECT * FROM provider_attempts WHERE run_id = ? ORDER BY started_at"
-      )
-        .bind(runId)
-        .all(),
-      env.PIPELINE_DB.prepare(
-        `SELECT r.* FROM repair_rounds r JOIN pages p ON p.page_id = r.page_id
+    )
+      .bind(runId)
+      .all(),
+    env.PIPELINE_DB.prepare(
+      "SELECT * FROM provider_attempts WHERE run_id = ? ORDER BY started_at"
+    )
+      .bind(runId)
+      .all(),
+    env.PIPELINE_DB.prepare(
+      `SELECT r.* FROM repair_rounds r JOIN pages p ON p.page_id = r.page_id
          WHERE p.run_id = ? ORDER BY r.page_id, r.round_number`
-      )
-        .bind(runId)
-        .all(),
-      env.PIPELINE_DB.prepare(
-        `SELECT v.* FROM reviews v JOIN pages p ON p.page_id = v.page_id
+    )
+      .bind(runId)
+      .all(),
+    env.PIPELINE_DB.prepare(
+      `SELECT v.* FROM reviews v JOIN pages p ON p.page_id = v.page_id
          WHERE p.run_id = ? ORDER BY v.created_at DESC`
-      )
-        .bind(runId)
-        .all(),
-    ]);
+    )
+      .bind(runId)
+      .all(),
+  ]);
   return {
     run,
     pages: pages.results,

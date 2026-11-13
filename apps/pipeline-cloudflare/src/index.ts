@@ -301,7 +301,8 @@ export class ProductionBookRunWorkflow extends WorkflowEntrypoint<
     const pipeline = new ProductionBookRun(
       this.env.PIPELINE_DB,
       this.env.PIPELINE_ARTIFACTS,
-      runtimeConfig.LOCAL_CUSTOMER_API === "true" && runtimeConfig.IMAGE_PROVIDER !== "gemini"
+      runtimeConfig.LOCAL_CUSTOMER_API === "true" &&
+      runtimeConfig.IMAGE_PROVIDER !== "gemini"
         ? new LocalMockImageProcessor(this.env.PIPELINE_ARTIFACTS)
         : new ContainerImageProcessor(this.env.IMAGE_CONTAINER),
       undefined,

@@ -250,13 +250,18 @@ describe("WP6 authenticated pipeline API", () => {
     const book = await localApi.createBook(owner, "local-create-book-001");
     const bookId = String(book.body.bookId);
     const sha256 = await digest(photoBytes);
-    const created = await localApi.createBookRun(owner, "local-create-run-001", bookId, {
-      photos: Array.from({ length: 5 }, () => ({
-        contentType: "image/jpeg" as const,
-        byteSize: photoBytes.byteLength,
-        sha256,
-      })),
-    });
+    const created = await localApi.createBookRun(
+      owner,
+      "local-create-run-001",
+      bookId,
+      {
+        photos: Array.from({ length: 5 }, () => ({
+          contentType: "image/jpeg" as const,
+          byteSize: photoBytes.byteLength,
+          sha256,
+        })),
+      }
+    );
     const runId = String(created.body.runId);
     const uploads = created.body.uploads as Array<{
       uploadIntentId: string;
@@ -301,8 +306,14 @@ describe("WP6 authenticated pipeline API", () => {
     expect(refreshed.body.uploadUrl).toContain("/content");
 
     await localApi.startBookRun(owner, "local-start-run-001", bookId, runId);
-    const access = await localApi.getArtifactAccess(owner, uploads[0]!.artifactId);
-    const response = await localApi.readLocalArtifact(owner, uploads[0]!.artifactId);
+    const access = await localApi.getArtifactAccess(
+      owner,
+      uploads[0]!.artifactId
+    );
+    const response = await localApi.readLocalArtifact(
+      owner,
+      uploads[0]!.artifactId
+    );
     expect((access.body.access as { url: string }).url).toContain("/content");
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(photoBytes);
   });

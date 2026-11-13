@@ -19,12 +19,20 @@ const wrangler = args => {
     { cwd: appDir, encoding: "utf8" }
   );
   if (result.status !== 0) {
-    throw new Error(`Local Wrangler command failed: ${result.stderr || result.stdout}`);
+    throw new Error(
+      `Local Wrangler command failed: ${result.stderr || result.stdout}`
+    );
   }
 };
 
 wrangler([
-  "d1", "migrations", "apply", database, "--local", "--persist-to", persistDir,
+  "d1",
+  "migrations",
+  "apply",
+  database,
+  "--local",
+  "--persist-to",
+  persistDir,
 ]);
 
 const now = new Date();
@@ -33,7 +41,14 @@ const sessionId = `local-smoke-session-${randomUUID()}`;
 const expiresAt = new Date(now.getTime() + 60 * 60 * 1000).toISOString();
 const sql = `INSERT INTO api_sessions (session_id, token_sha256, user_id, expires_at, revoked_at, created_at) VALUES ('${sessionId}', '${tokenHash}', '${ownerId}', '${expiresAt}', NULL, '${now.toISOString()}');`;
 wrangler([
-  "d1", "execute", database, "--local", "--persist-to", persistDir, "--command", sql,
+  "d1",
+  "execute",
+  database,
+  "--local",
+  "--persist-to",
+  persistDir,
+  "--command",
+  sql,
 ]);
 
 const request = async (method, path, { body, bytes, idempotencyKey } = {}) => {
@@ -48,7 +63,9 @@ const request = async (method, path, { body, bytes, idempotencyKey } = {}) => {
   });
   if (!response.ok) {
     const details = await response.text();
-    throw new Error(`${method} ${path} returned ${response.status}: ${details}`);
+    throw new Error(
+      `${method} ${path} returned ${response.status}: ${details}`
+    );
   }
   if (response.status === 204) return null;
   const contentType = response.headers.get("content-type") ?? "";
@@ -101,25 +118,38 @@ while (Date.now() < deadline) {
   await new Promise(resolve => setTimeout(resolve, 750));
 }
 if (status !== "completed") {
-  throw new Error(`Local run did not complete successfully (status: ${status ?? "unknown"})`);
+  throw new Error(
+    `Local run did not complete successfully (status: ${status ?? "unknown"})`
+  );
 }
 
-const artifact = detail.artifacts?.find(item => item.artifact_kind === "candidate_clean");
-if (!artifact) throw new Error("Completed run has no cleaned candidate artifact");
+const artifact = detail.artifacts?.find(
+  item => item.artifact_kind === "candidate_clean"
+);
+if (!artifact)
+  throw new Error("Completed run has no cleaned candidate artifact");
 const artifactAccess = await request(
   "GET",
   `/v1/artifacts/${encodeURIComponent(artifact.artifact_id)}/access`
 );
-const artifactResponse = await fetch(new URL(artifactAccess.access.url, baseUrl), {
-  headers: { Authorization: `Bearer ${token}` },
-});
+const artifactResponse = await fetch(
+  new URL(artifactAccess.access.url, baseUrl),
+  {
+    headers: { Authorization: `Bearer ${token}` },
+  }
+);
 const artifactBytes = await artifactResponse.arrayBuffer();
 if (!artifactResponse.ok || artifactBytes.byteLength === 0) {
   throw new Error(`Local artifact read failed with ${artifactResponse.status}`);
 }
 const editions = await request("GET", "/v1/catalog/editions");
-if (editions.editions.length === 0 || editions.editions.some(edition => edition.available)) {
-  throw new Error("Local edition catalog must contain unavailable prototype entries");
+if (
+  editions.editions.length === 0 ||
+  editions.editions.some(edition => edition.available)
+) {
+  throw new Error(
+    "Local edition catalog must contain unavailable prototype entries"
+  );
 }
 
 const evidence = await writeSmokeEvidence({
@@ -135,19 +165,25 @@ const evidence = await writeSmokeEvidence({
   externalServices: [],
 });
 
-console.log(JSON.stringify({
-  mode: "local-mock",
-  bookId,
-  runId: run.runId,
-  status,
-  pageCount: detail.pages?.length ?? null,
-  artifactRead: "passed",
-  editionCatalog: "prototype-only",
-  provider: "mock",
-  dataSource: "synthetic placeholder photo bytes",
-  remoteServicesUsed: false,
-  evidence,
-}, null, 2));
+console.log(
+  JSON.stringify(
+    {
+      mode: "local-mock",
+      bookId,
+      runId: run.runId,
+      status,
+      pageCount: detail.pages?.length ?? null,
+      artifactRead: "passed",
+      editionCatalog: "prototype-only",
+      provider: "mock",
+      dataSource: "synthetic placeholder photo bytes",
+      remoteServicesUsed: false,
+      evidence,
+    },
+    null,
+    2
+  )
+);
 
 async function writeSmokeEvidence(result) {
   const runTime = new Date().toISOString();
@@ -155,7 +191,10 @@ async function writeSmokeEvidence(result) {
   const outputDir = resolve(appDir, "../../artifacts/smoke", timestamp);
   await mkdir(outputDir, { recursive: true });
   const report = { ...result, generatedAt: runTime };
-  await writeFile(join(outputDir, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
+  await writeFile(
+    join(outputDir, "report.json"),
+    `${JSON.stringify(report, null, 2)}\n`
+  );
 
   const slides = [
     {
@@ -215,29 +254,66 @@ async function writeSmokeEvidence(result) {
   ];
   await writeFile(join(outputDir, "report.html"), evidenceHtml(report, slides));
 
-  if (process.platform !== "darwin" || !commandExists("sips") || !commandExists("ffmpeg")) {
-    return { directory: outputDir, video: null, note: "Install sips and ffmpeg to render the video on this machine." };
+  if (
+    process.platform !== "darwin" ||
+    !commandExists("sips") ||
+    !commandExists("ffmpeg")
+  ) {
+    return {
+      directory: outputDir,
+      video: null,
+      note: "Install sips and ffmpeg to render the video on this machine.",
+    };
   }
 
   const frameDir = await mkdtemp(join(tmpdir(), "pictobook-smoke-frames-"));
   try {
     for (let index = 0; index < slides.length; index += 1) {
       const svgPath = join(frameDir, `frame-${index}.svg`);
-      const pngPath = join(frameDir, `frame-${String(index).padStart(2, "0")}.png`);
+      const pngPath = join(
+        frameDir,
+        `frame-${String(index).padStart(2, "0")}.png`
+      );
       await writeFile(svgPath, slideSvg(slides[index], result));
-      const converted = spawnSync("sips", ["-s", "format", "png", svgPath, "--out", pngPath], {
-        encoding: "utf8",
-      });
-      if (converted.status !== 0) throw new Error(`sips frame render failed: ${converted.stderr}`);
+      const converted = spawnSync(
+        "sips",
+        ["-s", "format", "png", svgPath, "--out", pngPath],
+        {
+          encoding: "utf8",
+        }
+      );
+      if (converted.status !== 0)
+        throw new Error(`sips frame render failed: ${converted.stderr}`);
     }
     const videoPath = join(outputDir, "smoke.mp4");
-    const encoded = spawnSync("ffmpeg", [
-      "-hide_banner", "-loglevel", "error", "-y",
-      "-framerate", "1/3", "-i", join(frameDir, "frame-%02d.png"),
-      "-c:v", "libx264", "-r", "30", "-pix_fmt", "yuv420p", videoPath,
-    ], { encoding: "utf8" });
-    if (encoded.status !== 0) throw new Error(`ffmpeg video encoding failed: ${encoded.stderr}`);
-    return { directory: outputDir, video: videoPath, durationSeconds: slides.length * 3 };
+    const encoded = spawnSync(
+      "ffmpeg",
+      [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-framerate",
+        "1/3",
+        "-i",
+        join(frameDir, "frame-%02d.png"),
+        "-c:v",
+        "libx264",
+        "-r",
+        "30",
+        "-pix_fmt",
+        "yuv420p",
+        videoPath,
+      ],
+      { encoding: "utf8" }
+    );
+    if (encoded.status !== 0)
+      throw new Error(`ffmpeg video encoding failed: ${encoded.stderr}`);
+    return {
+      directory: outputDir,
+      video: videoPath,
+      durationSeconds: slides.length * 3,
+    };
   } finally {
     await rm(frameDir, { recursive: true, force: true });
   }
@@ -248,10 +324,17 @@ function commandExists(command) {
 }
 
 function slideSvg(slide, result) {
-  const escape = value => String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-  const lines = slide.lines.map((line, index) =>
-    `<text x="92" y="${360 + index * 66}" font-family="Arial,Helvetica,sans-serif" font-size="25" font-weight="500" fill="#1d302b">${escape(line)}</text>`
-  ).join("");
+  const escape = value =>
+    String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
+  const lines = slide.lines
+    .map(
+      (line, index) =>
+        `<text x="92" y="${360 + index * 66}" font-family="Arial,Helvetica,sans-serif" font-size="25" font-weight="500" fill="#1d302b">${escape(line)}</text>`
+    )
+    .join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
     <rect width="1280" height="720" fill="#f5f3ed"/>
     <rect x="54" y="42" width="1172" height="64" rx="32" fill="#e4efe9"/>
@@ -267,6 +350,11 @@ function slideSvg(slide, result) {
 }
 
 function evidenceHtml(report, slides) {
-  const rows = slides.map(slide => `<li><strong>${slide.title}</strong><span>${slide.subtitle}</span></li>`).join("");
+  const rows = slides
+    .map(
+      slide =>
+        `<li><strong>${slide.title}</strong><span>${slide.subtitle}</span></li>`
+    )
+    .join("");
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pictobook local smoke evidence</title><style>body{font:16px/1.5 system-ui,sans-serif;background:#f5f3ed;color:#1d302b;max-width:900px;margin:48px auto;padding:0 24px}header{background:#e4efe9;border-radius:20px;padding:24px}h1{margin:0 0 8px}strong,b{color:#245943}li{display:flex;justify-content:space-between;gap:20px;padding:14px 0;border-bottom:1px solid #d8ddd5}code{overflow-wrap:anywhere}.badge{display:inline-block;background:#2a745c;color:white;border-radius:20px;padding:4px 12px;font-weight:700}</style><header><span class="badge">PASSED · LOCAL MOCK</span><h1>Customer API smoke test</h1><p><strong>Data:</strong> synthetic placeholder image bytes, not customer photos<br><strong>Provider:</strong> mock<br><strong>Bindings:</strong> local Worker, D1, R2, Workflow</p><p><strong>External services:</strong> none</p></header><h2>Recorded steps</h2><ol>${rows}</ol><h2>Run result</h2><p>${report.pageCount} pages completed. Private artifact access and the prototype edition catalog both passed.</p><p><strong>Run ID:</strong> <code>${report.runId}</code></p><p><strong>Book ID:</strong> <code>${report.bookId}</code></p><p>Generated ${report.generatedAt}. This evidence uses fake test data and a deterministic mock provider.</p></html>`;
 }

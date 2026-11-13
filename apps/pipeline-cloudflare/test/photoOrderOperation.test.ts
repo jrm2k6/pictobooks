@@ -29,8 +29,9 @@ describe("updatePhotoOrder", () => {
       runId: "run-1",
       photoIds: ["photo-5", "photo-3", "photo-1", "photo-4", "photo-2"],
     });
-    const rows = await env.PIPELINE_DB
-      .prepare("SELECT photo_id FROM photos WHERE run_id = ? ORDER BY ordinal")
+    const rows = await env.PIPELINE_DB.prepare(
+      "SELECT photo_id FROM photos WHERE run_id = ? ORDER BY ordinal"
+    )
       .bind("run-1")
       .all<{ photo_id: string }>();
     expect(rows.results.map(row => row.photo_id)).toEqual([
@@ -69,8 +70,9 @@ describe("updatePhotoOrder", () => {
   });
 
   it("locks the photo order after processing starts", async () => {
-    await env.PIPELINE_DB
-      .prepare("UPDATE book_runs SET status = 'running' WHERE run_id = ?")
+    await env.PIPELINE_DB.prepare(
+      "UPDATE book_runs SET status = 'running' WHERE run_id = ?"
+    )
       .bind("run-1")
       .run();
 
@@ -93,28 +95,25 @@ const seedRun = async (
   runId: string,
   status: string
 ): Promise<void> => {
-  await env.PIPELINE_DB
-    .prepare(
-      "INSERT INTO books (book_id, owner_id, status, created_at, updated_at) VALUES (?, ?, 'draft', ?, ?)"
-    )
+  await env.PIPELINE_DB.prepare(
+    "INSERT INTO books (book_id, owner_id, status, created_at, updated_at) VALUES (?, ?, 'draft', ?, ?)"
+  )
     .bind(bookId, ownerId, timestamp, timestamp)
     .run();
-  await env.PIPELINE_DB
-    .prepare(
-      `INSERT INTO book_runs
+  await env.PIPELINE_DB.prepare(
+    `INSERT INTO book_runs
        (run_id, book_id, status, style_pack_version, cost_ceiling_micros,
         cost_spent_micros, created_at, updated_at)
        VALUES (?, ?, ?, 'test-style', 1000, 0, ?, ?)`
-    )
+  )
     .bind(runId, bookId, status, timestamp, timestamp)
     .run();
   for (let ordinal = 1; ordinal <= 5; ordinal += 1) {
-    await env.PIPELINE_DB
-      .prepare(
-        `INSERT INTO photos
+    await env.PIPELINE_DB.prepare(
+      `INSERT INTO photos
          (photo_id, run_id, ordinal, source_artifact_id, intake_status, created_at)
          VALUES (?, ?, ?, NULL, 'pending', ?)`
-      )
+    )
       .bind(`photo-${ordinal}`, runId, ordinal, timestamp)
       .run();
   }

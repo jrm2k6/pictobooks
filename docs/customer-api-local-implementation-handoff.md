@@ -4,8 +4,8 @@
 - **Last updated:** 2026-11-11
 - **Owner:** Primary implementation agent
 - **Goal:** Make the customer API flow usable end to end against local Worker,
-D1, R2, and Workflow bindings, with no calls to remote Cloudflare resources,
-Clerk, Gemini, payment, or fulfillment providers.
+  D1, R2, and Workflow bindings, with no calls to remote Cloudflare resources,
+  Clerk, Gemini, payment, or fulfillment providers.
 
 ## Guardrails
 
