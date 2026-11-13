@@ -7,14 +7,14 @@ Keep API keys and R2 S3 credentials in Wrangler Worker secrets only.
 
 ## Current production resources
 
-| Resource | Name / value |
-| --- | --- |
-| Pipeline Worker | `pictobook-pipeline-production` |
-| Pipeline D1 | `pictobook-pipeline-production` |
-| Pipeline R2 bucket | `pictobook-pipeline-production` |
-| Marketing Pages project | `pictobooks` |
-| Customer app Pages project | `pictobook-app` |
-| Customer app URL | `https://studio.pictobook.app` |
+| Resource                   | Name / value                    |
+| -------------------------- | ------------------------------- |
+| Pipeline Worker            | `pictobook-pipeline-production` |
+| Pipeline D1                | `pictobook-pipeline-production` |
+| Pipeline R2 bucket         | `pictobook-pipeline-production` |
+| Marketing Pages project    | `pictobooks`                    |
+| Customer app Pages project | `pictobook-app`                 |
+| Customer app URL           | `https://studio.pictobook.app`  |
 
 The production Worker configuration is
 [`apps/pipeline-cloudflare/wrangler.production.jsonc`](../apps/pipeline-cloudflare/wrangler.production.jsonc).
