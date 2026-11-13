@@ -86,8 +86,9 @@ protected by the API's idempotency handling.
 - Human review and canonical promotion were validated through the UI states and
   already implemented Worker routes; the gallery itself uses fixtures and does
   not write preview data.
-- Passing judge findings and reviewer notes into the real image provider remains
-  follow-up work; the current preview generation profile is synthetic.
+- At WP7 completion, preview generation used synthetic fixtures. Later work
+  added provider-facing feedback for bounded repair and source-based
+  regeneration; real Nano Banana end-to-end validation remains separate.
 
 See the [WP7 visual review gallery](../ui-review/wp7/index.html) and
 [gallery notes](../ui-review/wp7/README.md).
