@@ -1,6 +1,12 @@
-# WP1: Infrastructure-neutral pipeline ports
+---
+status: accepted
+---
 
-Status: complete (2026-11-07)
+# Keep pipeline orchestration behind infrastructure-neutral ports
+
+## Decision
+
+The local pipeline needed to remain usable while adding Cloudflare storage and execution. We decided that pipeline orchestration depends on narrow ports, with filesystem and Cloudflare implementations supplied as adapters, so domain behavior can be exercised independently of its runtime.
 
 ## Result
 

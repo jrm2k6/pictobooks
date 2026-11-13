@@ -138,7 +138,7 @@ that exact Candidate.
 
 The database is the index: normal application code looks up exact object keys
 in `artifacts`; it does not infer state by listing R2 prefixes.
-The [WP3 R2 Artifact Adapter](./cloudflare-wp3-r2-artifact-storage.md) implements
+The [WP3 R2 Artifact Adapter](./adr/0007-private-immutable-r2-artifacts.md) implements
 that write, verification, recovery, and deletion boundary.
 
 ### Human decision and style tables

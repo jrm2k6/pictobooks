@@ -1,4 +1,12 @@
-# WP6: Authenticated pipeline API
+---
+status: accepted
+---
+
+# Use provider-neutral sessions and owner-scoped API access
+
+## Decision
+
+The customer API needed authorization before a login vendor had been selected. We decided to accept opaque bearer sessions, store only their digests, resolve a principal before resource access, and scope every resource query to its owner. An identity provider can issue and revoke sessions without changing pipeline ownership rules.
 
 WP6 adds the customer-facing Worker interface for creating Books and Book Runs,
 uploading private source photos, reading run status, reviewing exact Candidate

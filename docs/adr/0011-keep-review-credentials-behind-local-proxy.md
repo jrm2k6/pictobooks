@@ -1,7 +1,12 @@
-# WP7: Cloudflare review dashboard
+---
+status: accepted
+---
 
-Status: Complete
-Last updated: 2026-11-10
+# Keep review credentials and signed artifact access behind a local proxy
+
+## Decision
+
+The desktop review dashboard needs authenticated Worker access without exposing bearer tokens or signed artifact URLs to browser code. We decided that a local Node proxy holds the reviewer session, forwards API operations, and streams short-lived artifact downloads to the dashboard. Synthetic fixtures and screenshots provide review evidence without customer content.
 
 ## Delivered
 
@@ -84,5 +89,5 @@ protected by the API's idempotency handling.
 - Passing judge findings and reviewer notes into the real image provider remains
   follow-up work; the current preview generation profile is synthetic.
 
-See the [WP7 visual review gallery](./ui-review/wp7/index.html) and
-[gallery notes](./ui-review/wp7/README.md).
+See the [WP7 visual review gallery](../ui-review/wp7/index.html) and
+[gallery notes](../ui-review/wp7/README.md).
