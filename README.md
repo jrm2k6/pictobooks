@@ -70,7 +70,7 @@ name with `pnpm --filter <package> <command>`.
 | ---------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
 | `apps/landing`               | React/Vite marketing site                                                      | Local development and static build                                                    |
 | `apps/functions`             | Cloudflare Worker for landing-page waitlist endpoints                          | Separate from the image pipeline; local secrets and a KV binding are needed to run it |
-| `apps/web`                   | React customer journey using TanStack Router and TanStack Query                | Interactive prototype with sample data; not API-connected                             |
+| `apps/web`                   | React customer app using TanStack Router and TanStack Query                     | Branded login in production; screen prototype/storybook is local-only                 |
 | `apps/pipeline`              | Node image pipeline, provider adapters, QA, repair, and local review dashboard | Runs locally with a mock provider or Gemini                                           |
 | `apps/pipeline-cloudflare`   | Worker API, D1/R2 storage, and durable Book Run Workflows                      | Local and preview configurations; preview uses remote Cloudflare resources            |
 | `apps/pipeline-image-worker` | Node/Sharp image operations used by the Cloudflare Container                   | Tested locally; Container packaging requires Docker                                   |
