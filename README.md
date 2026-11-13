@@ -182,6 +182,22 @@ pnpm --filter landing build
 dry run for the Container-backed Worker. That step may require Docker and
 network access. GitHub Actions runs this check for pull requests.
 
+## Production release
+
+Merging a pull request to `main` creates a GitHub Release and version tag. It
+does not deploy production automatically. After the release workflow succeeds,
+run `scripts/release-prod.sh --dry-run`, review its output, then run
+`scripts/release-prod.sh` from a clean `main` checkout. The script requires the
+matching GitHub Release and asks you to type `deploy to production` before it
+changes production resources.
+
+Targets can be selected with `--target site`, `app`, `waitlist-worker`, or
+`pipeline`. `all` deploys all four. The app is served at
+[`studio.pictobook.app`](https://studio.pictobook.app); its sign-in page is a
+placeholder until authentication is connected. Production D1, R2, Worker
+bindings, and secrets are described in the
+[production release runbook](docs/production-release.md).
+
 ## Documentation guide
 
 - [Cloudflare architecture decisions](docs/adr/)
