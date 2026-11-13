@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pictobook Customer API · Swagger UI</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css"
+    />
+    <style>
+      body {
+        margin: 0;
+        background: #f5f7f8;
+      }
+      .page-note {
+        max-width: 1200px;
+        margin: 20px auto 0;
+        padding: 16px 20px;
+        border: 1px solid #dbe4e8;
+        border-radius: 10px;
+        background: #fff;
+        color: #233648;
+        font:
+          15px/1.5 system-ui,
+          sans-serif;
+      }
+      .page-note strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+      .page-note a {
+        color: #155e75;
+      }
+      #swagger-ui {
+        max-width: 1240px;
+        margin: 0 auto;
+      }
+      .swagger-ui .topbar {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-note">
+      <strong>Draft customer API contract</strong>
+      Browse the customer journey tags for screen and state mappings. The
+      request buttons are disabled because some operations describe planned
+      endpoints. See the <a href="customer-api-contract.md">contract notes</a>
+      for implementation status and the
+      <a href="customer-screen-api-map.yaml">per-screen React/API map</a> for
+      component and hook ownership.
+    </div>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script>
+      window.onload = () => {
+        SwaggerUIBundle({
+          url: "customer-api.openapi.yaml",
+          dom_id: "#swagger-ui",
+          deepLinking: true,
+          displayRequestDuration: true,
+          filter: true,
+          supportedSubmitMethods: [],
+          presets: [SwaggerUIBundle.presets.apis],
+          layout: "BaseLayout",
+        });
+      };
+    </script>
+  </body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "bookId": "book-27894c6063e97bba77315b41d5842aad",
+  "runId": "run-be74d39eca342871ab02e75c96cb41e9",
+  "status": "completed",
+  "pageCount": 5,
+  "artifactRead": "passed",
+  "editionCatalog": "prototype-only",
+  "provider": "mock",
+  "dataSource": "synthetic placeholder photo bytes",
+  "bindings": [
+    "local Worker",
+    "local D1",
+    "local R2",
+    "local Workflow"
+  ],
+  "externalServices": [],
+  "generatedAt": "2026-11-12T01:39:53.998Z"
+}

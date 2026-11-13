@@ -1,0 +1,408 @@
+version: 1
+contractStatus: target
+description: >-
+  Agent-readable map from the React story states to API operations and the
+  planned TanStack Query integration boundary. `reactStatus` remains
+  disconnected until the customer app is wired to real endpoints.
+sources:
+  openapi: docs/customer-api.openapi.yaml
+  screenCatalog: apps/web/screenCatalog.js
+  stateMachine: apps/web/stateMachine.js
+  routeAndComponentRegistry: apps/web/main.jsx
+operationStatus:
+  listBooks:
+    worker: partial
+    reactClient: disconnected
+    details: Exists, but the response does not yet include target latest-run/page and order summaries.
+  createBook:
+    worker: partial
+    reactClient: disconnected
+    details: Exists, but currently ignores the book title and child personalization fields.
+  updateBook:
+    worker: planned
+    reactClient: disconnected
+  listBookRuns:
+    worker: implemented
+    reactClient: disconnected
+  createBookRun:
+    worker: implemented
+    reactClient: disconnected
+    details: Creates the run and upload intents. Local mode returns authenticated Worker upload URLs backed by local R2; React is not connected.
+  startBookRun:
+    worker: implemented
+    reactClient: disconnected
+  getBookRun:
+    worker: partial
+    reactClient: disconnected
+    details: Exists, but response serialization needs to match the camelCase nested target schema.
+  refreshUploadIntent:
+    worker: implemented
+    reactClient: disconnected
+    details: Local-only authenticated Worker URL refresh; preview/prod remain on the separate R2 presigner path.
+  updatePhotoOrder:
+    worker: implemented
+    reactClient: disconnected
+    details: Persists exact 5–10 photo order for a created owner-scoped run; idempotency is handled by the API layer.
+  reviewCandidate:
+    worker: implemented
+    reactClient: disconnected
+  regeneratePage:
+    worker: implemented
+    reactClient: disconnected
+  getArtifactAccess:
+    worker: implemented
+    reactClient: disconnected
+  listEditions:
+    worker: implemented
+    reactClient: disconnected
+    details: Local prototype catalog only; entries are unavailable and have zero illustrative prices.
+  createOrder:
+    worker: planned
+    reactClient: disconnected
+  getOrder:
+    worker: planned
+    reactClient: disconnected
+integrationRules:
+  networkOwner: Route-level integration hooks; do not issue fetch calls from presentational screen components.
+  screenBoundary: Existing screen components receive data and callbacks as props; keep that contract while connecting API operations.
+  queryLibrary: TanStack Query
+  mutationHeaders:
+    - Authorization: Bearer Clerk session token
+    - Idempotency-Key: fresh stable key per user intent; reuse for retries of that same intent
+  queryKeys:
+    books: [books]
+    bookRuns: [book-runs, bookId]
+    bookRun: [book-run, bookId, runId]
+    editions: [editions]
+    order: [order, orderId]
+  invalidateAfterMutation:
+    createBook: [[books]]
+    updateBook: [[books], [book, bookId]]
+    createBookRun: [[books], [book-runs, bookId], [book-run, bookId, runId]]
+    updatePhotoOrder: [[book-run, bookId, runId]]
+    startBookRun: [[books], [book-run, bookId, runId]]
+    reviewCandidate: [[books], [book-run, bookId, runId]]
+    regeneratePage: [[books], [book-runs, bookId], [book-run, bookId, runId]]
+    createOrder: [[books], [order, orderId]]
+
+screens:
+  - id: library
+    title: My books
+    route: /books
+    component: apps/web/screens/BookshelfScreen.jsx
+    reactStatus: disconnected
+    reads:
+      - operationId: listBooks
+        hook: useBooksQuery
+        when: On route entry and after book/order mutations.
+      - operationId: getBookRun
+        hook: useBookRunQuery
+        when: When opening a book with ready pages or resuming an in-progress book.
+    actions:
+      - event: Create book
+        operationId: createBook
+        mutationHook: useCreateBookMutation
+        nextScreen: create
+      - event: Review ready pages
+        operationId: getBookRun
+        nextScreen: review
+      - event: Open an earlier book
+        operationId: getBookRun
+        nextScreen: preview
+      - event: View order status
+        operationId: getOrder
+        nextScreen: complete
+
+  - id: empty
+    title: First visit
+    route: /welcome
+    component: apps/web/screens/FirstVisitScreen.jsx
+    reactStatus: disconnected
+    reads: []
+    actions:
+      - event: Start a book
+        operationId: createBook
+        mutationHook: useCreateBookMutation
+        nextScreen: create
+      - event: See how it works
+        operationId: none
+        note: Static explanatory content; photo upload starts only after book details are saved.
+        nextScreen: upload
+
+  - id: account
+    title: Sign in or create an account
+    route: /account/sign-in
+    component: apps/web/screens/SignInScreen.jsx
+    reactStatus: disconnected
+    authProvider: Clerk React SDK
+    reads: []
+    actions:
+      - event: Continue with Google
+        operationId: none
+        note: Clerk handles OAuth and session creation.
+      - event: Continue with email link
+        operationId: none
+        note: Clerk sends and verifies the magic link; Pictobook does not handle credentials.
+
+  - id: account-sent
+    title: Check your email
+    route: /account/check-email
+    component: apps/web/screens/EmailConfirmationScreen.jsx
+    reactStatus: disconnected
+    authProvider: Clerk React SDK
+    reads: []
+    actions:
+      - event: Edit address
+        operationId: none
+        nextScreen: account
+      - event: Sign-in link opened
+        operationId: listBooks
+        note: After Clerk completes sign-in, the library fetches the signed-in user's books.
+        nextScreen: library
+
+  - id: create
+    title: Book details
+    route: /books/new/details
+    component: apps/web/screens/BookDetailsScreen.jsx
+    reactStatus: disconnected
+    reads: []
+    actions:
+      - event: Save new book details
+        operationId: createBook
+        mutationHook: useCreateBookMutation
+        nextScreen: upload
+      - event: Save existing book edits
+        operationId: updateBook
+        mutationHook: useUpdateBookMutation
+        nextScreen: upload
+
+  - id: upload
+    title: Choose photos
+    route: /books/new/photos
+    component: apps/web/screens/PhotoSelectionScreen.jsx
+    reactStatus: disconnected
+    reads: []
+    actions:
+      - event: Continue with selected photos
+        operationId: createBookRun
+        mutationHook: useCreateBookRunMutation
+        sideEffect: PUT each local file to its returned uploadUrl with requiredHeaders, directly to R2.
+        stateMachineEvent: Arrange pages
+        nextScreen: arrange
+
+  - id: arrange
+    title: Order the pages
+    route: /books/new/order
+    component: apps/web/screens/OrderPagesScreen.jsx
+    reactStatus: disconnected
+    reads:
+      - operationId: getBookRun
+        hook: useBookRunQuery
+        when: Load saved photo upload state when resuming an unstarted run.
+    actions:
+      - event: Reorder photos
+        operationId: updatePhotoOrder
+        mutationHook: useUpdatePhotoOrderMutation
+        when: Persist the selected order before starting generation.
+      - event: Make the pages
+        operationId: startBookRun
+        mutationHook: useStartBookRunMutation
+        precondition: Every upload succeeded and the final order is saved.
+        stateMachineEvent: Make the pages
+        nextScreen: processing
+
+  - id: processing
+    title: Pages are being made
+    route: /books/new/creating
+    component: apps/web/screens/ProcessingScreen.jsx
+    reactStatus: disconnected
+    reads:
+      - operationId: getBookRun
+        hook: useBookRunQuery
+        refetchInterval: Poll while run status is created, running, or partially_completed; stop on terminal status.
+    actions:
+      - event: Pages ready
+        operationId: getBookRun
+        nextScreen: review
+
+  - id: slow
+    title: Some pages are taking longer
+    route: /books/new/creating/slow
+    component: apps/web/screens/SlowProcessingScreen.jsx
+    reactStatus: disconnected
+    reads:
+      - operationId: getBookRun
+        hook: useBookRunQuery
+        refetchInterval: Continue polling unfinished pages while run is active.
+    actions:
+      - event: Review finished pages
+        operationId: getBookRun
+        nextScreen: review
+      - event: Page needs a retry
+        operationId: getBookRun
+        note: Read the page state first; the customer chooses retry from the attention screen.
+        nextScreen: issue
+
+  - id: review
+    title: Review a page
+    route: /books/new/pages/review
+    component: apps/web/screens/PageReviewScreen.jsx
+    reactStatus: disconnected
+    reads:
+      - operationId: getBookRun
+        hook: useBookRunQuery
+        when: Load exact candidate IDs, QA outcomes, and review state.
+      - operationId: getArtifactAccess
+        hook: useArtifactAccessQuery
+        when: Request short-lived access for the selected candidate image.
+    actions:
+      - event: Keep page
+        operationId: reviewCandidate
+        mutationHook: useReviewCandidateMutation
+        nextScreen: preview
+      - event: Request another version
+        operationId: reviewCandidate
+        mutationHook: useReviewCandidateMutation
+        decision: changes_requested
+        note: Save optional correction notes here so the later regeneration can include reviewer feedback; the current prototype does not collect this note yet.
+        nextScreen: issue
+      - event: Preview the book
+        operationId: getBookRun
+        nextScreen: preview
+
+  - id: issue
+    title: A page needs attention
+    route: /books/new/pages/needs-attention
+    component: apps/web/screens/PageReviewScreen.jsx
+    reactStatus: disconnected
+    reads:
+      - operationId: getBookRun
+        hook: useBookRunQuery
+      - operationId: getArtifactAccess
+        hook: useArtifactAccessQuery
+    actions:
+      - event: Retry this page
+        operationId: regeneratePage
+        mutationHook: useRegeneratePageMutation
+        note: New run is derived from the original source and includes judge findings and reviewer notes.
+        nextScreen: processing
+      - event: Keep current page
+        operationId: none
+        note: This prototype action only moves to preview; production approval semantics need a distinct customer decision if this is intended to approve the candidate.
+        nextScreen: preview
+
+  - id: preview
+    title: Preview the book
+    route: /books/new/preview
+    component: apps/web/screens/BookPreviewScreen.jsx
+    reactStatus: disconnected
+    reads:
+      - operationId: getBookRun
+        hook: useBookRunQuery
+      - operationId: getArtifactAccess
+        hook: useArtifactAccessQuery
+        when: Load private page images or final book export.
+    actions:
+      - event: Choose an edition
+        operationId: listEditions
+        nextScreen: edition
+      - event: Back to page review
+        operationId: getBookRun
+        nextScreen: review
+
+  - id: edition
+    title: Choose an edition
+    route: /books/new/edition
+    component: apps/web/screens/EditionSelectionScreen.jsx
+    reactStatus: disconnected
+    reads:
+      - operationId: listEditions
+        hook: useEditionsQuery
+        when: Load current edition availability, price, and shipping price.
+    actions:
+      - event: Continue to delivery
+        operationId: none
+        note: Retain the selected edition in local checkout flow state until order creation.
+        nextScreen: checkout
+
+  - id: checkout
+    title: Delivery details
+    route: /checkout
+    component: apps/web/screens/CheckoutScreen.jsx
+    reactStatus: disconnected
+    reads:
+      - operationId: listEditions
+        hook: useEditionsQuery
+        when: Resolve authoritative price and delivery terms for the selected edition.
+    actions:
+      - event: Place order
+        operationId: createOrder
+        mutationHook: useCreateOrderMutation
+        nextScreen: complete
+        note: Navigate to the hosted payment URL; order is not paid until verified provider webhook confirms it.
+
+  - id: complete
+    title: Order received
+    route: /order/received
+    component: apps/web/screens/OrderCompleteScreen.jsx
+    reactStatus: disconnected
+    reads:
+      - operationId: getOrder
+        hook: useOrderQuery
+        when: Load payment and fulfillment status.
+      - operationId: getArtifactAccess
+        hook: useArtifactAccessQuery
+        when: Request temporary access to a paid digital PDF.
+    actions:
+      - event: Download PDF
+        operationId: getArtifactAccess
+        nextScreen: preview
+      - event: Return to My books
+        operationId: listBooks
+        nextScreen: library
+
+  - id: upload-error
+    title: Photo upload failed
+    route: /books/new/photos/error
+    component: apps/web/screens/PhotoUploadErrorScreen.jsx
+    reactStatus: disconnected
+    reads:
+      - operationId: getBookRun
+        hook: useBookRunQuery
+        when: Identify the failed photo upload intent.
+    actions:
+      - event: Try another photo
+        operationId: refreshUploadIntent
+        mutationHook: useRefreshUploadIntentMutation
+        sideEffect: Repeat the direct R2 PUT using the refreshed URL and headers.
+        nextScreen: upload
+      - event: Leave creation
+        operationId: none
+        nextScreen: library
+
+  - id: generation-error
+    title: A page could not be made
+    route: /books/new/pages/error
+    component: apps/web/screens/GenerationErrorScreen.jsx
+    reactStatus: disconnected
+    reads:
+      - operationId: getBookRun
+        hook: useBookRunQuery
+    actions:
+      - event: Retry page
+        operationId: none
+        note: This moves to the needs-attention screen; the retry mutation is started from that screen.
+        nextScreen: issue
+      - event: Return to book
+        operationId: listBooks
+        nextScreen: library
+
+flows:
+  source: apps/web/stateMachine.js
+  note: OpenAPI x-customer-journeys carries the journey summary visible in Swagger UI; this file adds screen/component ownership and planned React Query hook names.
+  crossReferences:
+    - account
+    - create-book
+    - review-and-repair
+    - purchase
+    - recovery
