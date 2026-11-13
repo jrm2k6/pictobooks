@@ -1,0 +1,43 @@
+export const STYLE_PACK_VERSION = "pictobook-preschool-v0.1" as const;
+
+export const POSITIVE_STYLE_PROMPT = [
+  "Create a simple classic kids coloring-book page in the Pictobook house style.",
+  "Use A4 portrait composition.",
+  "Use pure black line art on pure white background.",
+  "Use medium-bold, smooth, continuous outlines.",
+  "Use large closed areas for coloring.",
+  "Keep the background sparse and easy to color.",
+  "Do not print captions, titles, borders, page numbers, or text.",
+].join(" ");
+
+export const NEGATIVE_STYLE_PROMPT = [
+  "photorealistic",
+  "grayscale",
+  "gray shading",
+  "shadows",
+  "gradients",
+  "cross-hatching",
+  "stippling",
+  "texture",
+  "sketch marks",
+  "messy lines",
+  "thin lines",
+  "tiny details",
+  "crowded background",
+  "clutter",
+  "realistic hair strands",
+  "realistic fur texture",
+  "clothing logos",
+  "text",
+  "letters",
+  "captions",
+  "page numbers",
+  "border",
+  "watermark",
+  "scary face",
+  "uncanny face",
+  "distorted hands",
+  "distorted eyes",
+  "extra fingers",
+  "malformed limbs",
+].join(", ");

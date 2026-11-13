@@ -1,0 +1,29 @@
+{
+  "name": "pipeline-cloudflare",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "dev": "wrangler dev --config wrangler.local.jsonc --persist-to ../../tmp/cloudflare-spike/state",
+    "dev:full": "wrangler dev --persist-to ../../tmp/cloudflare-spike/state",
+    "local:session": "node scripts/seed-local-session.mjs",
+    "smoke:local": "node scripts/smoke-local-customer.mjs",
+    "deploy:dry": "wrangler deploy --dry-run",
+    "smoke:preview": "node --env-file=.env.preview scripts/smoke-remote.mjs --target preview",
+    "smoke:book-run:preview": "node --env-file=.env.preview scripts/smoke-book-run.mjs --target preview",
+    "smoke:api:preview": "node --env-file=.env.preview scripts/smoke-api-preview.mjs",
+    "smoke:production": "node --env-file=.env.production scripts/smoke-remote.mjs --target production",
+    "test": "vitest run && node --test scripts/objectKeys.test.mjs scripts/smokeCliArgs.test.mjs && node scripts/wp2-migrations.test.mjs",
+    "types": "wrangler types"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.6.0",
+    "typescript": "5.6.3",
+    "vitest": "5.1.0",
+    "wrangler": "4.157.0"
+  },
+  "dependencies": {
+    "aws4fetch": "1.0.20"
+  }
+}
