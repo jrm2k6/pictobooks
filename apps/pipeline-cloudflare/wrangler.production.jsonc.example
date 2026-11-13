@@ -1,0 +1,91 @@
+// Copy this file to wrangler.production.jsonc after creating the dedicated
+// production D1 database and replacing the D1 ID placeholder. Keep resource
+// names and IDs in source control; store credentials with Wrangler secrets.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pictobook-pipeline-production",
+  "main": "src/index.ts",
+  "workers_dev": true,
+  "compatibility_date": "2026-11-07",
+  "vars": {
+    "PIPELINE_INITIAL_CANDIDATE_COUNT": "2",
+    "LOCAL_CUSTOMER_API": "false",
+    "IMAGE_PROVIDER": "gemini",
+    "R2_ENDPOINT": "https://80cab986d9f7c33ae20f05b088aa2604.r2.cloudflarestorage.com",
+    "R2_BUCKET": "pictobook-pipeline-production",
+    "GEMINI_IMAGE_MODEL": "gemini-nano-banana-2.1",
+    "GEMINI_CANDIDATE_COST_MICROS": "65000",
+    "GEMINI_VISION_MODEL": "gemini-3.8-flash",
+    "GEMINI_STYLE_JUDGE_COST_MICROS": "10000",
+    "SMOKE_TESTS_ENABLED": "false",
+  },
+  "upload_source_maps": true,
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+    },
+  },
+  "d1_databases": [
+    {
+      "binding": "PIPELINE_DB",
+      "database_name": "pictobook-pipeline-production",
+      "database_id": "REPLACE_WITH_PRODUCTION_D1_ID",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PIPELINE_ARTIFACTS",
+      "bucket_name": "pictobook-pipeline-production",
+    },
+  ],
+  "workflows": [
+    {
+      "name": "pictobook-pipeline-production",
+      "binding": "BOOK_RUN_WORKFLOW",
+      "class_name": "BookRunWorkflow",
+    },
+    {
+      "name": "pictobook-production-book-run-production",
+      "binding": "PRODUCTION_BOOK_RUN_WORKFLOW",
+      "class_name": "ProductionBookRunWorkflow",
+    },
+  ],
+  "containers": [
+    {
+      "class_name": "ImageContainer",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "base": {
+          "dockerfile": "../pipeline-image-worker/Dockerfile",
+          "build_context": "../..",
+        },
+      },
+      "observability": {
+        "logs": {
+          "enabled": true,
+        },
+      },
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "IMAGE_CONTAINER",
+        "class_name": "ImageContainer",
+      },
+    ],
+  },
+  "exports": {
+    "ImageContainer": {
+      "type": "durable-object",
+      "storage": "sqlite",
+    },
+  },
+}
