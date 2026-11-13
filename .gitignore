@@ -8,15 +8,15 @@ build/
 *.dist
 
 # Environment variables
+# Ignore all .env files (any app, any environment) except committed examples
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env.development
-.env.staging
-.env.production
-.env.preview
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+!.env.*.example
+!**/.env.*.example
 apps/functions/.dev.vars
 apps/functions/.wrangler/
 
@@ -123,3 +123,6 @@ temp/
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Generated test/smoke run output
+/artifacts/
