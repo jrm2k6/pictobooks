@@ -1,12 +1,18 @@
 # Customer product prototype review
 
-Start the interactive storybook from the repository root:
+The production app opens on a branded `/login` screen. Its email form is a
+placeholder until authentication is connected. The interactive prototype and
+storybook are loaded only by the local Vite dev server.
+
+Start the app locally from the repository root:
 
 ```sh
 pnpm --filter web dev
 ```
 
-Open [http://127.0.0.1:4176](http://127.0.0.1:4176). Use the left rail to move
+Open [http://127.0.0.1:4176](http://127.0.0.1:4176) for the login screen, then
+choose **Open local prototype** in the footer, or go directly to
+[/storybook](http://127.0.0.1:4176/storybook). Use the left rail to move
 between screens and states. The direction switcher applies three visual
 explorations to the same product flow. Each screen can also be linked directly,
 for example `/books/new/pages/review?direction=studio`. Open the flow map at
@@ -40,6 +46,7 @@ fulfillment are connected.
 
 | Flow     | Screen                       | Screenshot                               |
 | -------- | ---------------------------- | ---------------------------------------- |
+| Account  | Production login landing     | [View](screenshots/login.png)            |
 | Start    | My books                     | [View](screenshots/library.png)          |
 | Start    | First visit / empty library  | [View](screenshots/empty.png)            |
 | Account  | Sign in or create an account | [View](screenshots/account.png)          |
