@@ -85,7 +85,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: pictobook-web
+          projectName: pictobook-app
           directory: apps/web/dist
           gitHubToken: ${{ github.token }}
 
