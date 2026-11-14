@@ -1,0 +1,24 @@
+/* Force Clerk's card to be fluid and unclipped */
+.cl-rootBox,
+.cl-cardBox,
+.cl-card {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+.cl-cardBox {
+  box-shadow: none !important;
+  border: none !important;
+  overflow: visible !important;
+  padding: 0 4px !important;
+  box-sizing: border-box !important;
+}
+
+.cl-card {
+  padding: 16px 0 !important;
+  box-shadow: none !important;
+  border: none !important;
+  outline: none !important;
+  box-sizing: border-box !important;
+}
