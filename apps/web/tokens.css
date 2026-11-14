@@ -1,0 +1,25 @@
+:root {
+  /* Brand palette */
+  --color-coral: oklch(0.65 0.18 30);
+  --color-navy: oklch(0.22 0.04 255);
+  --color-gold: oklch(0.88 0.15 85);
+  --color-offwhite: oklch(0.99 0.005 80);
+
+  /* Semantic surface / text */
+  --color-bg: #f9f7f4;
+  --color-surface: #fff;
+  --color-border: #e8eceb;
+  --color-text: #203649;
+  --color-text-secondary: #73818b;
+  --color-text-muted: #a2aaa9;
+
+  /* Typography */
+  --font-heading: 'Fraunces', Georgia, serif;
+  --font-body: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-pill: 24px;
+}

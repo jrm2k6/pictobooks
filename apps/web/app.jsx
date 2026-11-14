@@ -6,7 +6,9 @@ import {
   SignUp,
   useAuth,
 } from "@clerk/react";
+import "./tokens.css";
 import { AppShell } from "./app-shell.jsx";
+import { BooksPage } from "./books-page.jsx";
 import { AuthLayout, clerkAppearance } from "./auth-layout.jsx";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -32,48 +34,6 @@ function AuthedLayout() {
   return <Outlet />;
 }
 
-function BooksPage() {
-  return (
-    <AppShell>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "360px", textAlign: "center", gap: "16px" }}>
-        <div style={{
-          width: "72px", height: "72px", borderRadius: "20px",
-          background: "oklch(0.99 0.005 80)",
-          border: "1.5px dashed oklch(0.65 0.18 30 / 0.4)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}>
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-            <path d="M6 8h20M6 13h20M6 18h12" stroke="oklch(0.65 0.18 30)" strokeWidth="1.75" strokeLinecap="round" />
-            <circle cx="23" cy="22" r="6" fill="oklch(0.65 0.18 30 / 0.12)" stroke="oklch(0.65 0.18 30)" strokeWidth="1.5" />
-            <path d="M23 19.5v5M20.5 22h5" stroke="oklch(0.65 0.18 30)" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-        </div>
-        <div>
-          <h1 style={{ fontFamily: '"Fraunces", Georgia, serif', fontSize: "22px", fontWeight: 700, color: "#203649", margin: "0 0 6px" }}>
-            No books yet
-          </h1>
-          <p style={{ fontFamily: '"Plus Jakarta Sans", sans-serif', fontSize: "15px", color: "#73818b", margin: 0 }}>
-            Create your first coloring book from family photos.
-          </p>
-        </div>
-        <button style={{
-          marginTop: "8px",
-          background: "oklch(0.65 0.18 30)",
-          color: "#fff",
-          border: "none",
-          borderRadius: "10px",
-          padding: "12px 24px",
-          fontFamily: '"Plus Jakarta Sans", sans-serif',
-          fontSize: "14px",
-          fontWeight: 700,
-          cursor: "pointer",
-        }}>
-          Create a book
-        </button>
-      </div>
-    </AppShell>
-  );
-}
 
 const rootRoute = createRootRoute();
 
@@ -148,8 +108,8 @@ const howItWorksRoute = createRoute({
   path: "/how-it-works",
   component: () => (
     <AppShell>
-      <h1 style={{ fontFamily: '"Fraunces", Georgia, serif', fontSize: "28px", fontWeight: 700, color: "#203649" }}>How it works</h1>
-      <p style={{ fontFamily: '"Plus Jakarta Sans", sans-serif', color: "#73818b", marginTop: "8px" }}>Coming soon.</p>
+      <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "28px", fontWeight: 700, color: "var(--color-text)" }}>How it works</h1>
+      <p style={{ fontFamily: "var(--font-body)", color: "var(--color-text-secondary)", marginTop: "8px" }}>Coming soon.</p>
     </AppShell>
   ),
 });
