@@ -7,7 +7,6 @@ import {
   useAuth,
 } from "@clerk/react";
 import "./tokens.css";
-import { AppShell } from "./app-shell.jsx";
 import { BooksPage } from "./books-page.jsx";
 import { AuthLayout, clerkAppearance } from "./auth-layout.jsx";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -103,23 +102,12 @@ const booksRoute = createRoute({
   component: BooksPage,
 });
 
-const howItWorksRoute = createRoute({
-  getParentRoute: () => authedLayout,
-  path: "/how-it-works",
-  component: () => (
-    <AppShell>
-      <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "28px", fontWeight: 700, color: "var(--color-text)" }}>How it works</h1>
-      <p style={{ fontFamily: "var(--font-body)", color: "var(--color-text-secondary)", marginTop: "8px" }}>Coming soon.</p>
-    </AppShell>
-  ),
-});
-
 const router = createRouter({
   routeTree: rootRoute.addChildren([
     indexRoute,
     signInRoute,
     signUpRoute,
-    authedLayout.addChildren([booksRoute, howItWorksRoute]),
+    authedLayout.addChildren([booksRoute]),
   ]),
 });
 

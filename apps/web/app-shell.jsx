@@ -53,9 +53,6 @@ export function AppShell({ children }) {
             <Link to="/books" className={styles.navLink} data-active={pathname === "/books" || undefined}>
               My books
             </Link>
-            <Link to="/how-it-works" className={styles.navLink} data-active={pathname === "/how-it-works" || undefined}>
-              How it works
-            </Link>
           </nav>
         </div>
         <UserMenu />
