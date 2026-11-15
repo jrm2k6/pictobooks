@@ -6,6 +6,8 @@ import {
   SignUp,
   useAuth,
 } from "@clerk/react";
+import "./tokens.css";
+import { BooksPage } from "./books-page.jsx";
 import { AuthLayout, clerkAppearance } from "./auth-layout.jsx";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -31,14 +33,6 @@ function AuthedLayout() {
   return <Outlet />;
 }
 
-function BooksPage() {
-  return (
-    <main style={{ padding: "2rem", fontFamily: "sans-serif" }}>
-      <h1>Your Books</h1>
-      <p>Your pictobooks will appear here.</p>
-    </main>
-  );
-}
 
 const rootRoute = createRootRoute();
 

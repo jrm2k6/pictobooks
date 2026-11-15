@@ -1,6 +1,8 @@
 import React from "react";
 import "./login.css";
 import "./clerk-overrides.css";
+import "./tokens.css";
+import styles from "./auth-layout.module.css";
 
 export const clerkAppearance = {
   variables: {
@@ -100,12 +102,12 @@ export function AuthLayout({ kicker, heading, intro, toggleText, toggleHref, tog
           <p className="form-intro">{intro}</p>
           <div style={{ marginTop: "28px", padding: "0 8px" }}>{children}</div>
           {toggleText && (
-            <p style={{ marginTop: "16px", textAlign: "center", fontSize: "14px", color: "#73818b" }}>
+            <p className={styles.toggleRow}>
               {toggleText}{" "}
-              <a href={toggleHref} style={{ color: "#e96752", fontWeight: 600, textDecoration: "none" }}>{toggleLinkText}</a>
+              <a href={toggleHref} className={styles.toggleLink}>{toggleLinkText}</a>
             </p>
           )}
-          <p className="login-legal" style={{ marginTop: "20px" }}>
+          <p className={`login-legal ${styles.legal}`}>
             By continuing, you agree to our{" "}
             <a href="https://pictobook.app/legal/terms-of-service">Terms</a> and{" "}
             <a href="https://pictobook.app/legal/privacy-policy">Privacy Policy</a>.

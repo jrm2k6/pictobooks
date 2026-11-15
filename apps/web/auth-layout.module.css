@@ -1,0 +1,21 @@
+.toggleRow {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  font-family: var(--font-body);
+}
+
+.toggleLink {
+  color: var(--color-coral);
+  font-weight: 600;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.legal {
+  margin-top: 20px;
+}
