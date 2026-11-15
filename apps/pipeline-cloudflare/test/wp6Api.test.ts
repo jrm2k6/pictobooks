@@ -149,10 +149,9 @@ describe("WP6 authenticated pipeline API", () => {
     vi.stubGlobal(
       "fetch",
       async (_input: RequestInfo | URL): Promise<Response> => {
-        return new Response(
-          JSON.stringify({ keys: [testPublicJwk] }),
-          { headers: { "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ keys: [testPublicJwk] }), {
+          headers: { "Content-Type": "application/json" },
+        });
       }
     );
   });
@@ -326,12 +325,10 @@ describe("WP6 authenticated pipeline API", () => {
     });
     const bookId = String(book.body.bookId);
 
-    const updated = await api.updateBook(
-      owner,
-      "update-book-001",
-      bookId,
-      { title: "Emma's Big Adventure", childAge: 6 }
-    );
+    const updated = await api.updateBook(owner, "update-book-001", bookId, {
+      title: "Emma's Big Adventure",
+      childAge: 6,
+    });
     expect(updated.status).toBe(200);
     expect(updated.body).toMatchObject({
       bookId,
@@ -354,7 +351,9 @@ describe("WP6 authenticated pipeline API", () => {
 
     // Strangers cannot update
     await expect(
-      api.updateBook(stranger, "stranger-update-001", bookId, { title: "Hacked" })
+      api.updateBook(stranger, "stranger-update-001", bookId, {
+        title: "Hacked",
+      })
     ).rejects.toMatchObject({ status: 404 });
   });
 

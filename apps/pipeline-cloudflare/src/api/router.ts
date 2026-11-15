@@ -20,8 +20,7 @@ const corsHeaders = (origin: string): Record<string, string> => {
   if (!CORS_ALLOWED_ORIGINS.includes(origin)) return {};
   return {
     "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods":
-      "GET, POST, PATCH, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers":
       "Authorization, Content-Type, Idempotency-Key",
   };

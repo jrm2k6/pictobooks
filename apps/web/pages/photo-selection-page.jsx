@@ -1,22 +1,22 @@
-import React, { useState, useCallback } from 'react';
-import { useNavigate, useSearch } from '@tanstack/react-router';
-import { WizardShell } from './wizard-shell.jsx';
-import { useCreateBookRun } from '../hooks/use-create-book-run.js';
-import { useApiClient } from '../api-client.js';
-import styles from './photo-selection-page.module.css';
+import React, { useState, useCallback } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { WizardShell } from "./wizard-shell.jsx";
+import { useCreateBookRun } from "../hooks/use-create-book-run.js";
+import { useApiClient } from "../api-client.js";
+import styles from "./photo-selection-page.module.css";
 
-const ACCEPTED_TYPES = 'image/jpeg,image/png,image/webp';
+const ACCEPTED_TYPES = "image/jpeg,image/png,image/webp";
 const MIN_PHOTOS = 5;
-const MAX_PHOTOS = 10;
+const MAX_PHOTOS = 20;
 const MAX_BYTES = 26_214_400; // 25 MB per photo
 
 /** Compute SHA-256 hex digest for a File. */
 async function sha256Hex(file) {
   const buffer = await file.arrayBuffer();
-  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
   return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 /**
@@ -36,25 +36,29 @@ export function PhotoSelectionPage() {
   const [uploadStatus, setUploadStatus] = useState(null); // null | 'uploading' | 'error'
   const [uploadError, setUploadError] = useState(null);
 
-  const hasValidCount = photos.length >= MIN_PHOTOS && photos.length <= MAX_PHOTOS;
+  const hasValidCount =
+    photos.length >= MIN_PHOTOS && photos.length <= MAX_PHOTOS;
 
-  const handleFileChange = useCallback((e) => {
-    const selected = Array.from(e.currentTarget.files ?? []);
-    const availableSlots = Math.max(0, MAX_PHOTOS - photos.length);
-    const toAdd = selected.slice(0, availableSlots).filter(
-      (f) => f.size <= MAX_BYTES
-    );
-    const newPhotos = toAdd.map((file) => ({
-      file,
-      preview: URL.createObjectURL(file),
-      name: file.name,
-    }));
-    setPhotos((prev) => [...prev, ...newPhotos]);
-    e.currentTarget.value = '';
-  }, [photos.length]);
+  const handleFileChange = useCallback(
+    e => {
+      const selected = Array.from(e.currentTarget.files ?? []);
+      const availableSlots = Math.max(0, MAX_PHOTOS - photos.length);
+      const toAdd = selected
+        .slice(0, availableSlots)
+        .filter(f => f.size <= MAX_BYTES);
+      const newPhotos = toAdd.map(file => ({
+        file,
+        preview: URL.createObjectURL(file),
+        name: file.name,
+      }));
+      setPhotos(prev => [...prev, ...newPhotos]);
+      e.currentTarget.value = "";
+    },
+    [photos.length]
+  );
 
   function removePhoto(index) {
-    setPhotos((prev) => {
+    setPhotos(prev => {
       URL.revokeObjectURL(prev[index].preview);
       return prev.filter((_, i) => i !== index);
     });
@@ -62,12 +66,14 @@ export function PhotoSelectionPage() {
 
   async function handleContinue() {
     if (!hasValidCount || !bookId) return;
-    setUploadStatus('uploading');
+    setUploadStatus("uploading");
     setUploadError(null);
 
     try {
       // 1. Compute SHA-256 for each file
-      const hashes = await Promise.all(photos.map(({ file }) => sha256Hex(file)));
+      const hashes = await Promise.all(
+        photos.map(({ file }) => sha256Hex(file))
+      );
 
       // 2. Create the run and get upload intents
       const photoInputs = photos.map(({ file }, i) => ({
@@ -77,12 +83,19 @@ export function PhotoSelectionPage() {
         ordinal: i + 1,
       }));
 
-      const { runId, uploads } = await createBookRun({ bookId, photos: photoInputs });
+      const { runId, uploads } = await createBookRun({
+        bookId,
+        photos: photoInputs,
+      });
 
       // 3. Upload each file directly to its signed URL
       await Promise.all(
         uploads.map((intent, i) =>
-          api.uploadPhoto(intent.uploadUrl, intent.requiredHeaders, photos[i].file)
+          api.uploadPhoto(
+            intent.uploadUrl,
+            intent.requiredHeaders,
+            photos[i].file
+          )
         )
       );
 
@@ -95,25 +108,28 @@ export function PhotoSelectionPage() {
         preview: p.preview,
       }));
       try {
-        sessionStorage.setItem(`pictobook_photos_${runId}`, JSON.stringify(photoMeta));
+        sessionStorage.setItem(
+          `pictobook_photos_${runId}`,
+          JSON.stringify(photoMeta)
+        );
       } catch {
         // sessionStorage may be blocked in private windows — not fatal
       }
 
-      navigate({ to: '/books/new/order', search: { bookId, runId } });
+      navigate({ to: "/books/new/order", search: { bookId, runId } });
     } catch (err) {
-      setUploadStatus('error');
-      setUploadError(err.message ?? 'Upload failed. Please try again.');
+      setUploadStatus("error");
+      setUploadError(err.message ?? "Upload failed. Please try again.");
     }
   }
 
-  const isUploading = uploadStatus === 'uploading';
+  const isUploading = uploadStatus === "uploading";
 
   return (
     <WizardShell step={2}>
       <header className={styles.header}>
         <span className={styles.eyebrow}>Choose the moments</span>
-        <h1 className={styles.heading}>Pick 5–10 photos.</h1>
+        <h1 className={styles.heading}>Pick 5–20 photos.</h1>
         <p className={styles.lead}>
           Choose clear photos of family, pets, and favourite places. Each photo
           becomes one page in the book.
@@ -121,8 +137,12 @@ export function PhotoSelectionPage() {
       </header>
 
       <label className={styles.uploadZone} htmlFor="photo-picker">
-        <span className={styles.uploadIcon} aria-hidden="true">＋</span>
-        <strong className={styles.uploadPrimary}>Choose photos from your device</strong>
+        <span className={styles.uploadIcon} aria-hidden="true">
+          ＋
+        </span>
+        <strong className={styles.uploadPrimary}>
+          Choose photos from your device
+        </strong>
         <span className={styles.uploadSecondary}>
           JPEG, PNG, or WEBP · 25 MB max per photo
         </span>
@@ -165,8 +185,10 @@ export function PhotoSelectionPage() {
 
       <div className={styles.countLine} aria-live="polite">
         <span>
-          <strong>{photos.length} photo{photos.length !== 1 ? 's' : ''} selected</strong>
-          {' · '}at least {MIN_PHOTOS}, up to {MAX_PHOTOS}
+          <strong>
+            {photos.length} photo{photos.length !== 1 ? "s" : ""} selected
+          </strong>
+          {" · "}at least {MIN_PHOTOS}, up to {MAX_PHOTOS} photos
         </span>
         <span className={styles.privacy}>All photos stay private</span>
       </div>
@@ -187,7 +209,7 @@ export function PhotoSelectionPage() {
           disabled={!hasValidCount || isUploading}
           onClick={handleContinue}
         >
-          {isUploading ? 'Uploading…' : 'Arrange pages →'}
+          {isUploading ? "Uploading…" : "Arrange pages →"}
         </button>
       </div>
     </WizardShell>

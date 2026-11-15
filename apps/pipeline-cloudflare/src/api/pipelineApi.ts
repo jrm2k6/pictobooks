@@ -602,8 +602,7 @@ export class PipelineApi {
             styleQa: styleQaRow
               ? {
                   status: styleQaRow["status"],
-                  score:
-                    (styleQaRow["overall_score"] as number | null) ?? null,
+                  score: (styleQaRow["overall_score"] as number | null) ?? null,
                 }
               : { status: "pending", score: null },
           };
@@ -1522,9 +1521,7 @@ const metadataValue = (
   lower: string
 ): string | undefined => metadata?.[camel] ?? metadata?.[lower];
 
-const snakeToCamel = (
-  obj: Record<string, unknown>
-): Record<string, unknown> =>
+const snakeToCamel = (obj: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(
     Object.entries(obj).map(([key, value]) => [
       key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase()),

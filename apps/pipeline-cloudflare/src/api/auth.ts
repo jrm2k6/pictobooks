@@ -81,9 +81,7 @@ export class JwtAuthenticator {
       throw new AuthenticationError();
     }
 
-    const signedData = new TextEncoder().encode(
-      `${headerB64}.${payloadB64}`
-    );
+    const signedData = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
     const signature = decodeBase64Url(signatureB64);
 
     const valid = await crypto.subtle.verify(
