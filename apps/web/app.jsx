@@ -44,7 +44,7 @@ const indexRoute = createRoute({
   },
 });
 
-const signInRoute = createRoute({
+const signInLayout = createRoute({
   getParentRoute: () => rootRoute,
   path: "/sign-in",
   component: () => (
@@ -67,7 +67,12 @@ const signInRoute = createRoute({
   ),
 });
 
-const signUpRoute = createRoute({
+const signInSubRoute = createRoute({
+  getParentRoute: () => signInLayout,
+  path: "$step",
+});
+
+const signUpLayout = createRoute({
   getParentRoute: () => rootRoute,
   path: "/sign-up",
   component: () => (
@@ -90,50 +95,9 @@ const signUpRoute = createRoute({
   ),
 });
 
-const signInSubRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/sign-in/$step",
-  component: () => (
-    <AuthLayout
-      kicker="Welcome back"
-      heading="Your books are waiting."
-      intro="Sign in to pick up where your family left off."
-      toggleText="Don't have an account?"
-      toggleHref="/sign-up"
-      toggleLinkText="Sign up"
-    >
-      <SignIn
-        routing="path"
-        path="/sign-in"
-        signUpUrl="/sign-up"
-        fallbackRedirectUrl="/books"
-        appearance={clerkAppearance}
-      />
-    </AuthLayout>
-  ),
-});
-
 const signUpSubRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/sign-up/$step",
-  component: () => (
-    <AuthLayout
-      kicker="Get started"
-      heading="Make memories colorful."
-      intro="Create your Pictobook account — it only takes a moment."
-      toggleText="Already have an account?"
-      toggleHref="/sign-in"
-      toggleLinkText="Sign in"
-    >
-      <SignUp
-        routing="path"
-        path="/sign-up"
-        signInUrl="/sign-in"
-        fallbackRedirectUrl="/books"
-        appearance={clerkAppearance}
-      />
-    </AuthLayout>
-  ),
+  getParentRoute: () => signUpLayout,
+  path: "$step",
 });
 
 const authedLayout = createRoute({
@@ -151,10 +115,8 @@ const booksRoute = createRoute({
 const router = createRouter({
   routeTree: rootRoute.addChildren([
     indexRoute,
-    signInRoute,
-    signInSubRoute,
-    signUpRoute,
-    signUpSubRoute,
+    signInLayout.addChildren([signInSubRoute]),
+    signUpLayout.addChildren([signUpSubRoute]),
     authedLayout.addChildren([booksRoute]),
   ]),
 });
