@@ -111,31 +111,120 @@ export class PipelineApi {
     };
   }
 
-  createBook(principal: Principal, key: string): Promise<ApiResponse> {
+  createBook(
+    principal: Principal,
+    key: string,
+    input: { title?: string; childName?: string; childAge?: number } = {}
+  ): Promise<ApiResponse> {
     return this.mutate(principal, key, "create_book", async stable => {
+      validateBookPersonalization(input);
       const bookId = `book-${stable}`;
       const now = this.isoNow();
       await this.database
         .prepare(
-          `INSERT INTO books (book_id, owner_id, status, created_at, updated_at)
-           VALUES (?, ?, 'draft', ?, ?) ON CONFLICT(book_id) DO NOTHING`
+          `INSERT INTO books
+             (book_id, owner_id, status, title, child_name, child_age, created_at, updated_at)
+           VALUES (?, ?, 'draft', ?, ?, ?, ?, ?) ON CONFLICT(book_id) DO NOTHING`
         )
-        .bind(bookId, principal.userId, now, now)
+        .bind(
+          bookId,
+          principal.userId,
+          input.title ?? null,
+          input.childName ?? null,
+          input.childAge ?? null,
+          now,
+          now
+        )
         .run();
-      return { status: 201, body: { bookId } };
+      return { status: 201, body: { bookId, status: "draft" } };
+    });
+  }
+
+  updateBook(
+    principal: Principal,
+    key: string,
+    bookId: string,
+    input: { title?: string; childName?: string; childAge?: number }
+  ): Promise<ApiResponse> {
+    return this.mutate(principal, key, `update_book:${bookId}`, async () => {
+      await this.requireOwnedBook(principal.userId, bookId);
+      validateBookPersonalization(input);
+      const now = this.isoNow();
+      await this.database
+        .prepare(
+          `UPDATE books
+           SET title      = coalesce(?, title),
+               child_name = coalesce(?, child_name),
+               child_age  = coalesce(?, child_age),
+               updated_at = ?
+           WHERE book_id = ? AND owner_id = ?`
+        )
+        .bind(
+          input.title ?? null,
+          input.childName ?? null,
+          input.childAge ?? null,
+          now,
+          bookId,
+          principal.userId
+        )
+        .run();
+      const book = await this.database
+        .prepare(
+          `SELECT book_id, status, title, child_name, child_age
+           FROM books WHERE book_id = ? AND owner_id = ?`
+        )
+        .bind(bookId, principal.userId)
+        .first<{
+          book_id: string;
+          status: string;
+          title: string | null;
+          child_name: string | null;
+          child_age: number | null;
+        }>();
+      if (!book) throw new ApiProblem(404, "book_not_found");
+      return {
+        status: 200,
+        body: {
+          bookId: book.book_id,
+          status: book.status,
+          title: book.title,
+          childName: book.child_name,
+          childAge: book.child_age,
+        },
+      };
     });
   }
 
   async listBooks(principal: Principal): Promise<ApiResponse> {
-    const books = await this.database
+    const result = await this.database
       .prepare(
-        `SELECT b.book_id, b.status, b.created_at, b.updated_at,
-              (SELECT count(*) FROM book_runs r WHERE r.book_id = b.book_id) AS run_count
-       FROM books b WHERE b.owner_id = ? ORDER BY b.updated_at DESC LIMIT 100`
+        `SELECT b.book_id, b.status, b.title, b.child_name, b.child_age,
+                b.created_at, b.updated_at,
+                (SELECT count(*) FROM book_runs r WHERE r.book_id = b.book_id) AS run_count
+         FROM books b WHERE b.owner_id = ? ORDER BY b.updated_at DESC LIMIT 100`
       )
       .bind(principal.userId)
-      .all();
-    return { status: 200, body: { books: books.results } };
+      .all<{
+        book_id: string;
+        status: string;
+        title: string | null;
+        child_name: string | null;
+        child_age: number | null;
+        created_at: string;
+        updated_at: string;
+        run_count: number;
+      }>();
+    const books = result.results.map(b => ({
+      bookId: b.book_id,
+      status: b.status,
+      title: b.title,
+      childName: b.child_name,
+      childAge: b.child_age,
+      createdAt: b.created_at,
+      updatedAt: b.updated_at,
+      runCount: b.run_count,
+    }));
+    return { status: 200, body: { books } };
   }
 
   async listBookRuns(
@@ -460,23 +549,94 @@ export class PipelineApi {
     runId: string
   ): Promise<ApiResponse> {
     await this.requireOwnedRun(principal.userId, bookId, runId);
-    const run = await readBookRunStatus({ PIPELINE_DB: this.database }, runId);
-    if (!run) throw new ApiProblem(404, "run_not_found");
-    const [photos, artifacts] = await Promise.all([
+    const statusData = await readBookRunStatus(
+      { PIPELINE_DB: this.database },
+      runId
+    );
+    if (!statusData) throw new ApiProblem(404, "run_not_found");
+
+    const [photosResult, artifactsResult] = await Promise.all([
       this.database
         .prepare("SELECT * FROM photos WHERE run_id = ? ORDER BY ordinal")
         .bind(runId)
         .all(),
       this.database
         .prepare(
-          "SELECT artifact_id, page_id, artifact_kind, mime_type, byte_size, created_at FROM artifacts WHERE run_id = ? AND deleted_at IS NULL ORDER BY created_at"
+          `SELECT artifact_id, page_id, artifact_kind, mime_type, byte_size, created_at
+           FROM artifacts WHERE run_id = ? AND deleted_at IS NULL ORDER BY created_at`
         )
         .bind(runId)
         .all(),
     ]);
+
+    const run = statusData.run as Record<string, unknown>;
+    const pages = statusData.pages as Array<Record<string, unknown>>;
+    const candidates = statusData.candidates as Array<Record<string, unknown>>;
+    const qaResults = statusData.qaResults as Array<Record<string, unknown>>;
+
+    const readyPageCount = pages.filter(p => p["state"] === "approved").length;
+
+    const mappedPages = pages.map(page => {
+      const pageId = page["page_id"] as string;
+      const pageCandidates = candidates
+        .filter(c => c["page_id"] === pageId)
+        .map(candidate => {
+          const candidateId = candidate["candidate_id"] as string;
+          const printQaRow = qaResults.find(
+            q => q["candidate_id"] === candidateId && q["qa_kind"] === "print"
+          );
+          const styleQaRow = qaResults.find(
+            q => q["candidate_id"] === candidateId && q["qa_kind"] === "style"
+          );
+          return {
+            candidateId,
+            generationKind: candidate["generation_kind"],
+            artifactId:
+              (candidate["clean_artifact_id"] as string | null) ?? null,
+            printQa: printQaRow
+              ? {
+                  status: printQaRow["status"],
+                  score: (printQaRow["overall_score"] as number | null) ?? null,
+                }
+              : { status: "pending", score: null },
+            styleQa: styleQaRow
+              ? {
+                  status: styleQaRow["status"],
+                  score:
+                    (styleQaRow["overall_score"] as number | null) ?? null,
+                }
+              : { status: "pending", score: null },
+          };
+        });
+      return {
+        pageId,
+        photoId: page["photo_id"],
+        state: page["state"],
+        approvedCandidateId:
+          (page["approved_candidate_id"] as string | null) ?? null,
+        candidates: pageCandidates,
+      };
+    });
+
     return {
       status: 200,
-      body: { ...run, photos: photos.results, artifacts: artifacts.results },
+      body: {
+        runId: run["run_id"],
+        bookId: run["book_id"],
+        status: run["status"],
+        stylePackVersion: run["style_pack_version"],
+        createdAt: run["created_at"],
+        completedAt: (run["completed_at"] as string | null) ?? null,
+        readyPageCount,
+        totalPageCount: pages.length,
+        pages: mappedPages,
+        photos: photosResult.results.map(p =>
+          snakeToCamel(p as Record<string, unknown>)
+        ),
+        artifacts: artifactsResult.results.map(a =>
+          snakeToCamel(a as Record<string, unknown>)
+        ),
+      },
     };
   }
 
@@ -1361,5 +1521,44 @@ const metadataValue = (
   camel: string,
   lower: string
 ): string | undefined => metadata?.[camel] ?? metadata?.[lower];
+
+const snakeToCamel = (
+  obj: Record<string, unknown>
+): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(obj).map(([key, value]) => [
+      key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase()),
+      value,
+    ])
+  );
+
+const validateBookPersonalization = (input: {
+  title?: string;
+  childName?: string;
+  childAge?: number;
+}): void => {
+  if (
+    input.title !== undefined &&
+    (typeof input.title !== "string" ||
+      input.title.trim().length < 1 ||
+      input.title.length > 120)
+  ) {
+    throw new ApiProblem(400, "invalid_title");
+  }
+  if (
+    input.childName !== undefined &&
+    (typeof input.childName !== "string" || input.childName.length > 80)
+  ) {
+    throw new ApiProblem(400, "invalid_child_name");
+  }
+  if (
+    input.childAge !== undefined &&
+    (!Number.isInteger(input.childAge) ||
+      input.childAge < 3 ||
+      input.childAge > 12)
+  ) {
+    throw new ApiProblem(400, "invalid_child_age");
+  }
+};
 
 export type { SignedArtifactRequest };

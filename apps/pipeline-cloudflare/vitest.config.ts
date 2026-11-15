@@ -16,6 +16,8 @@ export default defineConfig({
           R2_BUCKET: "test-bucket",
           R2_ACCESS_KEY_ID: "test-access-key",
           R2_SECRET_ACCESS_KEY: "test-secret-key",
+          CLERK_JWKS_URL:
+            "https://test.clerk.invalid/.well-known/jwks.json",
         },
       },
     }),

@@ -1,0 +1,4 @@
+# Copy to .dev.vars for local development. Never commit .dev.vars.
+# Worker secrets are injected via .dev.vars; non-secret vars live in wrangler.jsonc.
+
+CLERK_JWKS_URL=https://clerk.pictobook.app/.well-known/jwks.json
