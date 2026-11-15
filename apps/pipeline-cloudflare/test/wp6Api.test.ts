@@ -218,8 +218,11 @@ describe("WP6 authenticated pipeline API", () => {
       env as unknown as RuntimeEnv
     );
     expect(missingKey?.status).toBe(400);
-    expect(await missingKey?.json()).toEqual({
-      error: "idempotency_key_required",
+    expect(await missingKey?.json()).toMatchObject({
+      type: "/errors/idempotency_key_required",
+      title: "idempotency_key_required",
+      status: 400,
+      code: "idempotency_key_required",
     });
 
     const created = await handleApiRequest(

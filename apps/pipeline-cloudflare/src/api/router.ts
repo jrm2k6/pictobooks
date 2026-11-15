@@ -432,7 +432,10 @@ const requiredEnv = (
 };
 
 const problem = (status: number, code: string): Response =>
-  Response.json({ error: code }, { status });
+  Response.json(
+    { type: `/errors/${code}`, title: code, status, code },
+    { status }
+  );
 
 type RuntimeSecrets = {
   CLERK_JWKS_URL: string;
