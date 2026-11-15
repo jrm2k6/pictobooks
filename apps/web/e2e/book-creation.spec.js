@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { setupClerkTestingToken } from "@clerk/testing/playwright";
+import { clerk, setupClerkTestingToken } from "@clerk/testing/playwright";
 
 // ---------------------------------------------------------------------------
 // Unauthenticated — wizard routes must redirect to sign-in
@@ -22,17 +22,36 @@ test.describe("unauthenticated wizard redirects", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Authenticated — requires CLERK_SECRET_KEY + VITE_CLERK_PUBLISHABLE_KEY
+// Authenticated — requires:
+//   CLERK_SECRET_KEY     – Clerk test secret key (sk_test_...)
+//   VITE_CLERK_PUBLISHABLE_KEY – matching publishable key
+//   TEST_USER_EMAIL      – email of a test user in the Clerk instance
+//
+// setupClerkTestingToken only bypasses bot protection; clerk.signIn actually
+// creates an authenticated session. Run globalSetup via clerkSetup() first.
 // ---------------------------------------------------------------------------
+
+const hasAuthCreds =
+  !!process.env.CLERK_SECRET_KEY && !!process.env.TEST_USER_EMAIL;
 
 test.describe("book creation wizard", () => {
   test.skip(
-    !process.env.CLERK_SECRET_KEY,
-    "Set CLERK_SECRET_KEY to run authenticated flow tests"
+    !hasAuthCreds,
+    "Set CLERK_SECRET_KEY and TEST_USER_EMAIL to run authenticated flow tests"
   );
 
   test.beforeEach(async ({ page }) => {
     await setupClerkTestingToken({ page });
+    await clerk.signIn({
+      page,
+      signInParams: { strategy: "email_code", identifier: process.env.TEST_USER_EMAIL },
+    });
+    await page.goto("/books");
+    await expect(page).toHaveURL(/^[^?#]*\/books$/);
+  });
+
+  test.afterEach(async ({ page }) => {
+    await clerk.signOut({ page });
   });
 
   // ---- Step 1: Book details ------------------------------------------------
@@ -68,7 +87,6 @@ test.describe("book creation wizard", () => {
 
   test.describe("step 2 — photo selection", () => {
     test("renders the photo selection page", async ({ page }) => {
-      // Requires a bookId — use a fake one; the page renders before any API call
       await page.goto("/books/new/photos?bookId=test-book-id");
       await expect(page.getByRole("heading", { name: "Pick 5–20 photos." })).toBeVisible();
     });
@@ -174,14 +192,14 @@ test.describe("book creation wizard", () => {
         { photoId: "p5", name: "school.png", preview: null },
       ];
 
-      // Seed sessionStorage before navigation
-      await page.goto("/books/new/details"); // any authed page to get the origin
+      // Seed sessionStorage before navigating so the page picks it up on load
+      await page.goto("/books");
       await page.evaluate(
         ([key, value]) => sessionStorage.setItem(key, value),
         [`pictobook_photos_${runId}`, JSON.stringify(photoMeta)]
       );
-
       await page.goto(`/books/new/order?bookId=test-book-id&runId=${runId}`);
+
       await expect(page.getByRole("heading", { name: "Put the moments in order." })).toBeVisible();
       await expect(page.getByText("beach.png")).toBeVisible();
       await expect(page.getByRole("button", { name: /make the pages/i })).toBeEnabled();
@@ -197,13 +215,13 @@ test.describe("book creation wizard", () => {
         { photoId: "p5", name: "mid3.png", preview: null },
       ];
 
-      await page.goto("/books/new/details");
+      await page.goto("/books");
       await page.evaluate(
         ([key, value]) => sessionStorage.setItem(key, value),
         [`pictobook_photos_${runId}`, JSON.stringify(photoMeta)]
       );
-
       await page.goto(`/books/new/order?bookId=test-book-id&runId=${runId}`);
+
       await expect(page.getByRole("button", { name: /move first\.png up/i })).toBeDisabled();
       await expect(page.getByRole("button", { name: /move mid3\.png down/i })).toBeDisabled();
       await expect(page.getByRole("button", { name: /move first\.png down/i })).toBeEnabled();

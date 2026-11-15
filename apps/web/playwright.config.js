@@ -1,5 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 import { clerkSetup } from "@clerk/testing/playwright";
+import { config } from "dotenv";
+
+// Load .env.local so CLERK_SECRET_KEY is available to the test process
+// (Vite loads it for the dev server, but Playwright runs in a separate process)
+config({ path: ".env.local" });
 
 export default defineConfig({
   testDir: "./e2e",
