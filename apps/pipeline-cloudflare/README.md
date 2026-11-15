@@ -73,20 +73,27 @@ automatic approval, repair, and budget semantics.
 
 ## WP6 authenticated API
 
-The `/v1` routes use hashed opaque sessions, owner authorization, and mandatory
-idempotency keys for mutations. The preview proof creates a Book and Run,
-uploads directly through a short-lived R2 URL, starts and reviews the Run,
-promotes a canonical reference, requests private Artifact access, and launches
-a versioned regeneration:
+The `/v1` routes use Clerk JWT authentication, owner authorization, and mandatory
+idempotency keys for mutations. The Worker verifies RS256 JWTs by fetching the
+Clerk JWKS endpoint (no third-party JWT library) and caches keys in module
+scope. CORS is enabled for `http://127.0.0.1:4176` and `https://studio.pictobook.app`.
+
+Set the JWKS URL in `.dev.vars` for local development (copy `.dev.vars.example`):
+
+```
+CLERK_JWKS_URL=https://clerk.pictobook.app/.well-known/jwks.json
+```
+
+The preview smoke script creates a Book and Run, uploads directly through a
+short-lived R2 URL, starts and reviews the Run, promotes a canonical reference,
+requests private Artifact access, and launches a versioned regeneration:
 
 ```bash
 pnpm --filter pipeline-cloudflare smoke:api:preview
 ```
 
-The preview smoke session is test-only. Session issuance for real accounts will
-be owned by the eventual identity provider. See the
-[ADR 0010](../../docs/adr/0010-provider-neutral-owner-scoped-api.md) for the route and
-security contracts.
+See the [ADR 0010](../../docs/adr/0010-provider-neutral-owner-scoped-api.md)
+for the route and security contracts.
 
 ## WP8 Gemini image generation and Style QA
 

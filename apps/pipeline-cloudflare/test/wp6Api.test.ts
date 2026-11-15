@@ -1,7 +1,19 @@
 import { env } from "cloudflare:workers";
 import { applyD1Migrations, reset, type D1Migration } from "cloudflare:test";
-import { beforeEach, describe, expect, it } from "vitest";
-import { SessionAuthenticator, sha256Hex } from "../src/api/auth.js";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import {
+  JwtAuthenticator,
+  sha256Hex,
+  type JwksFetcher,
+} from "../src/api/auth.js";
 import {
   ApiProblem,
   PipelineApi,
@@ -17,6 +29,43 @@ const now = new Date("2026-11-10T12:00:00.000Z");
 const owner = { userId: "user-owner", sessionId: "session-owner" };
 const stranger = { userId: "user-stranger", sessionId: "session-stranger" };
 const photoBytes = new TextEncoder().encode("synthetic uploaded photo");
+
+// ---- JWT helpers --------------------------------------------------------
+
+let testKeyPair: CryptoKeyPair;
+let testPublicJwk: JsonWebKey & { kid: string };
+const TEST_KID = "test-kid-001";
+
+const encodeBase64Url = (data: unknown): string =>
+  btoa(JSON.stringify(data))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+
+const signJwt = async (
+  sub: string,
+  overrides: { exp?: number } = {}
+): Promise<string> => {
+  const exp = overrides.exp ?? Math.floor(Date.now() / 1000) + 3600;
+  const jti = crypto.randomUUID();
+  const headerB64 = encodeBase64Url({ alg: "RS256", kid: TEST_KID });
+  const payloadB64 = encodeBase64Url({ sub, exp, jti });
+  const sigInput = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
+  const rawSig = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    testKeyPair.privateKey,
+    sigInput
+  );
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(rawSig)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  return `${headerB64}.${payloadB64}.${sigB64}`;
+};
+
+const mockJwksFetcher: JwksFetcher = async () => [testPublicJwk];
+
+// ---- Test infrastructure ------------------------------------------------
 
 class FakeSigner implements ArtifactSigner {
   signUpload(input: {
@@ -58,6 +107,26 @@ class FakeLauncher implements BookRunLauncher {
   }
 }
 
+// ---- Setup ---------------------------------------------------------------
+
+beforeAll(async () => {
+  testKeyPair = await crypto.subtle.generateKey(
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      hash: "SHA-256",
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+    },
+    true,
+    ["sign", "verify"]
+  );
+  const rawPublicJwk = await crypto.subtle.exportKey(
+    "jwk",
+    testKeyPair.publicKey
+  );
+  testPublicJwk = { ...rawPublicJwk, kid: TEST_KID };
+});
+
 describe("WP6 authenticated pipeline API", () => {
   let launcher: FakeLauncher;
   let api: PipelineApi;
@@ -76,31 +145,56 @@ describe("WP6 authenticated pipeline API", () => {
       launcher,
       () => now
     );
+    // Mock fetch to serve the test JWKS for the router JWT auth path
+    vi.stubGlobal(
+      "fetch",
+      async (_input: RequestInfo | URL): Promise<Response> => {
+        return new Response(JSON.stringify({ keys: [testPublicJwk] }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+    );
   });
 
-  it("authenticates only live opaque sessions", async () => {
-    const token = "a".repeat(48);
-    await insertSession(
-      "session-owner",
-      owner.userId,
-      token,
-      "2099-11-13T00:00:00.000Z"
-    );
-    const auth = new SessionAuthenticator(env.PIPELINE_DB, () =>
-      now.toISOString()
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("authenticates Clerk JWTs and rejects invalid or expired tokens", async () => {
+    const auth = new JwtAuthenticator(
+      "https://test.invalid/jwks.json",
+      mockJwksFetcher
     );
 
+    const validJwt = await signJwt(owner.userId);
     await expect(
       auth.authenticate(
         new Request("https://api.invalid/v1/books", {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${validJwt}` },
         })
       )
-    ).resolves.toEqual(owner);
+    ).resolves.toMatchObject({ userId: owner.userId });
+
+    // No auth header
+    await expect(
+      auth.authenticate(new Request("https://api.invalid/v1/books"))
+    ).rejects.toMatchObject({ name: "AuthenticationError" });
+
+    // Not a JWT (opaque token)
     await expect(
       auth.authenticate(
         new Request("https://api.invalid/v1/books", {
           headers: { Authorization: `Bearer ${"b".repeat(48)}` },
+        })
+      )
+    ).rejects.toMatchObject({ name: "AuthenticationError" });
+
+    // Expired token
+    const expiredJwt = await signJwt(owner.userId, { exp: 1 });
+    await expect(
+      auth.authenticate(
+        new Request("https://api.invalid/v1/books", {
+          headers: { Authorization: `Bearer ${expiredJwt}` },
         })
       )
     ).rejects.toMatchObject({ name: "AuthenticationError" });
@@ -109,40 +203,77 @@ describe("WP6 authenticated pipeline API", () => {
   it("enforces authentication and idempotency at the HTTP router", async () => {
     const unauthorized = await handleApiRequest(
       new Request("https://api.invalid/v1/books", { method: "POST" }),
-      env as RuntimeEnv
+      env as unknown as RuntimeEnv
     );
     expect(unauthorized?.status).toBe(401);
 
-    const token = "r".repeat(48);
-    await insertSession(
-      "session-router",
-      owner.userId,
-      token,
-      "2099-11-13T00:00:00.000Z"
-    );
+    const jwt = await signJwt(owner.userId);
+
     const missingKey = await handleApiRequest(
       new Request("https://api.invalid/v1/books", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${jwt}` },
       }),
-      env as RuntimeEnv
+      env as unknown as RuntimeEnv
     );
     expect(missingKey?.status).toBe(400);
-    expect(await missingKey?.json()).toEqual({
-      error: "idempotency_key_required",
+    expect(await missingKey?.json()).toMatchObject({
+      type: "/errors/idempotency_key_required",
+      title: "idempotency_key_required",
+      status: 400,
+      code: "idempotency_key_required",
     });
 
     const created = await handleApiRequest(
       new Request("https://api.invalid/v1/books", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${jwt}`,
           "Idempotency-Key": "router-create-book-001",
         },
       }),
-      env as RuntimeEnv
+      env as unknown as RuntimeEnv
     );
     expect(created?.status).toBe(201);
+  });
+
+  it("returns CORS headers for allowed origins and handles preflight", async () => {
+    const preflight = await handleApiRequest(
+      new Request("https://api.invalid/v1/books", {
+        method: "OPTIONS",
+        headers: { Origin: "http://127.0.0.1:4176" },
+      }),
+      env as unknown as RuntimeEnv
+    );
+    expect(preflight?.status).toBe(204);
+    expect(preflight?.headers.get("Access-Control-Allow-Origin")).toBe(
+      "http://127.0.0.1:4176"
+    );
+
+    const jwt = await signJwt(owner.userId);
+    const response = await handleApiRequest(
+      new Request("https://api.invalid/v1/books", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${jwt}`,
+          Origin: "https://studio.pictobook.app",
+        },
+      }),
+      env as unknown as RuntimeEnv
+    );
+    expect(response?.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://studio.pictobook.app"
+    );
+
+    // Unknown origin → no CORS header
+    const noOrigin = await handleApiRequest(
+      new Request("https://api.invalid/v1/books", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${jwt}` },
+      }),
+      env as unknown as RuntimeEnv
+    );
+    expect(noOrigin?.headers.get("Access-Control-Allow-Origin")).toBeNull();
   });
 
   it("creates a run with scoped upload intents and replays without duplicates", async () => {
@@ -179,6 +310,51 @@ describe("WP6 authenticated pipeline API", () => {
         ],
       })
     ).rejects.toMatchObject({ status: 404, code: "book_not_found" });
+  });
+
+  it("creates a book with personalization fields and updates them", async () => {
+    const book = await api.createBook(owner, "personalized-book-001", {
+      title: "Emma's Adventure Book",
+      childName: "Emma",
+      childAge: 5,
+    });
+    expect(book.status).toBe(201);
+    expect(book.body).toMatchObject({
+      bookId: expect.any(String),
+      status: "draft",
+    });
+    const bookId = String(book.body.bookId);
+
+    const updated = await api.updateBook(owner, "update-book-001", bookId, {
+      title: "Emma's Big Adventure",
+      childAge: 6,
+    });
+    expect(updated.status).toBe(200);
+    expect(updated.body).toMatchObject({
+      bookId,
+      status: "draft",
+      title: "Emma's Big Adventure",
+      childName: "Emma",
+      childAge: 6,
+    });
+
+    const books = await api.listBooks(owner);
+    const listed = (books.body.books as Array<Record<string, unknown>>).find(
+      b => b["bookId"] === bookId
+    );
+    expect(listed).toMatchObject({
+      bookId,
+      title: "Emma's Big Adventure",
+      childName: "Emma",
+      childAge: 6,
+    });
+
+    // Strangers cannot update
+    await expect(
+      api.updateBook(stranger, "stranger-update-001", bookId, {
+        title: "Hacked",
+      })
+    ).rejects.toMatchObject({ status: 404 });
   });
 
   it("verifies a direct upload before starting exactly one Book Run", async () => {
@@ -456,7 +632,7 @@ describe("WP6 authenticated pipeline API", () => {
 });
 
 const seedReviewablePage = async () => {
-  const timestamp = now.toISOString();
+  const timestamp = new Date("2026-11-10T12:00:00.000Z").toISOString();
   const bookId = "book-review-owner";
   const runId = "run-review-owner";
   const photoId = "photo-review-owner";
@@ -469,8 +645,9 @@ const seedReviewablePage = async () => {
   const artifactSha = await digest(artifactBytes);
   await env.PIPELINE_DB.batch([
     env.PIPELINE_DB.prepare(
-      "INSERT INTO books VALUES (?, ?, 'review', ?, ?)"
-    ).bind(bookId, owner.userId, timestamp, timestamp),
+      `INSERT INTO books (book_id, owner_id, status, created_at, updated_at)
+       VALUES (?, ?, 'review', ?, ?)`
+    ).bind(bookId, "user-owner", timestamp, timestamp),
     env.PIPELINE_DB.prepare(
       "INSERT INTO book_runs VALUES (?, ?, 'partially_completed', 'pictobook-preschool-v0.1', 7000, 3000, ?, ?, ?)"
     ).bind(runId, bookId, timestamp, timestamp, timestamp),
@@ -549,26 +726,8 @@ const seedReviewablePage = async () => {
   return { bookId, runId, pageId, candidateId, artifactId };
 };
 
-const insertSession = async (
-  sessionId: string,
-  userId: string,
-  token: string,
-  expiresAt: string
-) => {
-  await env.PIPELINE_DB.prepare(
-    `INSERT INTO api_sessions
-     (session_id, token_sha256, user_id, expires_at, revoked_at, created_at)
-     VALUES (?, ?, ?, ?, NULL, ?)`
-  )
-    .bind(
-      sessionId,
-      await sha256Hex(token),
-      userId,
-      expiresAt,
-      now.toISOString()
-    )
-    .run();
-};
+// Keep sha256Hex in scope for helpers that compute hashes
+void sha256Hex;
 
 const digest = async (bytes: Uint8Array): Promise<string> => {
   const hash = await crypto.subtle.digest("SHA-256", bytes);

@@ -171,7 +171,7 @@ paths:
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
@@ -746,7 +746,10 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Clerk session token; verified by the API Worker.
+      description: >-
+        Clerk-issued RS256 JWT. The Worker verifies the signature against the
+        JWKS endpoint configured via CLERK_JWKS_URL using the Web Crypto API
+        (no third-party JWT library).
   parameters:
     IdempotencyKey:
       name: Idempotency-Key
@@ -982,10 +985,20 @@ components:
           properties:
             bookId:
               type: string
+            stylePackVersion:
+              type: string
             pages:
               type: array
               items:
                 $ref: "#/components/schemas/Page"
+            photos:
+              type: array
+              items:
+                $ref: "#/components/schemas/Photo"
+            artifacts:
+              type: array
+              items:
+                $ref: "#/components/schemas/ArtifactSummary"
     Page:
       type: object
       required: [pageId, photoId, state, candidates]
@@ -1048,6 +1061,45 @@ components:
           type: array
           items:
             type: string
+    Photo:
+      type: object
+      required: [photoId, runId, ordinal, state, createdAt]
+      properties:
+        photoId:
+          type: string
+        runId:
+          type: string
+        ordinal:
+          type: integer
+          minimum: 1
+        sourceArtifactId:
+          type: [string, "null"]
+        state:
+          type: string
+          enum: [pending, accepted, rejected]
+        createdAt:
+          type: string
+          format: date-time
+    ArtifactSummary:
+      type: object
+      required: [artifactId, runId, artifactKind, mimeType, byteSize, createdAt]
+      properties:
+        artifactId:
+          type: string
+        runId:
+          type: string
+        pageId:
+          type: [string, "null"]
+        artifactKind:
+          type: string
+        mimeType:
+          type: string
+        byteSize:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
     Edition:
       type: object
       required: [editionId, name, format, priceMinor, available]

@@ -1,0 +1,62 @@
+/* ── WizardShell ──────────────────────────────────────────────────────── */
+/* Narrows the form area and adds the step indicator above each wizard page. */
+
+.frame {
+  max-width: 560px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+/* ── Step tracker ─────────────────────────────────────────────────────── */
+
+.stepTrack {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.stepLabel {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.01em;
+}
+
+.stepLabel strong {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.dots {
+  display: flex;
+  gap: 6px;
+}
+
+.dotOn,
+.dotOff {
+  display: block;
+  width: 24px;
+  height: 5px;
+  border-radius: var(--radius-pill);
+  transition: background 0.2s;
+}
+
+.dotOn {
+  background: var(--color-coral);
+}
+
+.dotOff {
+  background: var(--color-border);
+}
+
+/* ── Content area ─────────────────────────────────────────────────────── */
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}

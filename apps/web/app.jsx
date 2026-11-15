@@ -8,6 +8,10 @@ import {
 } from "@clerk/react";
 import "./tokens.css";
 import { BooksPage } from "./books-page.jsx";
+import { BookDetailsPage } from "./pages/book-details-page.jsx";
+import { PhotoSelectionPage } from "./pages/photo-selection-page.jsx";
+import { OrderPagesPage } from "./pages/order-pages-page.jsx";
+import { ProcessingPage } from "./pages/processing-page.jsx";
 import { AuthLayout, clerkAppearance } from "./auth-layout.jsx";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -44,7 +48,7 @@ const indexRoute = createRoute({
   },
 });
 
-const signInRoute = createRoute({
+const signInLayout = createRoute({
   getParentRoute: () => rootRoute,
   path: "/sign-in",
   component: () => (
@@ -67,7 +71,12 @@ const signInRoute = createRoute({
   ),
 });
 
-const signUpRoute = createRoute({
+const signInSubRoute = createRoute({
+  getParentRoute: () => signInLayout,
+  path: "$step",
+});
+
+const signUpLayout = createRoute({
   getParentRoute: () => rootRoute,
   path: "/sign-up",
   component: () => (
@@ -90,50 +99,9 @@ const signUpRoute = createRoute({
   ),
 });
 
-const signInSubRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/sign-in/$step",
-  component: () => (
-    <AuthLayout
-      kicker="Welcome back"
-      heading="Your books are waiting."
-      intro="Sign in to pick up where your family left off."
-      toggleText="Don't have an account?"
-      toggleHref="/sign-up"
-      toggleLinkText="Sign up"
-    >
-      <SignIn
-        routing="path"
-        path="/sign-in"
-        signUpUrl="/sign-up"
-        fallbackRedirectUrl="/books"
-        appearance={clerkAppearance}
-      />
-    </AuthLayout>
-  ),
-});
-
 const signUpSubRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/sign-up/$step",
-  component: () => (
-    <AuthLayout
-      kicker="Get started"
-      heading="Make memories colorful."
-      intro="Create your Pictobook account — it only takes a moment."
-      toggleText="Already have an account?"
-      toggleHref="/sign-in"
-      toggleLinkText="Sign in"
-    >
-      <SignUp
-        routing="path"
-        path="/sign-up"
-        signInUrl="/sign-in"
-        fallbackRedirectUrl="/books"
-        appearance={clerkAppearance}
-      />
-    </AuthLayout>
-  ),
+  getParentRoute: () => signUpLayout,
+  path: "$step",
 });
 
 const authedLayout = createRoute({
@@ -148,14 +116,56 @@ const booksRoute = createRoute({
   component: BooksPage,
 });
 
+// ── Book creation wizard ───────────────────────────────────────────────
+
+/** /books/new → redirect to /books/new/details */
+const booksNewRoute = createRoute({
+  getParentRoute: () => authedLayout,
+  path: "/books/new",
+  beforeLoad: () => {
+    throw redirect({ to: "/books/new/details" });
+  },
+});
+
+const bookDetailsRoute = createRoute({
+  getParentRoute: () => authedLayout,
+  path: "/books/new/details",
+  component: BookDetailsPage,
+});
+
+const bookPhotosRoute = createRoute({
+  getParentRoute: () => authedLayout,
+  path: "/books/new/photos",
+  component: PhotoSelectionPage,
+});
+
+const bookOrderRoute = createRoute({
+  getParentRoute: () => authedLayout,
+  path: "/books/new/order",
+  component: OrderPagesPage,
+});
+
+const bookCreatingRoute = createRoute({
+  getParentRoute: () => authedLayout,
+  path: "/books/new/creating",
+  component: ProcessingPage,
+});
+
+// ── Router ─────────────────────────────────────────────────────────────
+
 const router = createRouter({
   routeTree: rootRoute.addChildren([
     indexRoute,
-    signInRoute,
-    signInSubRoute,
-    signUpRoute,
-    signUpSubRoute,
-    authedLayout.addChildren([booksRoute]),
+    signInLayout.addChildren([signInSubRoute]),
+    signUpLayout.addChildren([signUpSubRoute]),
+    authedLayout.addChildren([
+      booksRoute,
+      booksNewRoute,
+      bookDetailsRoute,
+      bookPhotosRoute,
+      bookOrderRoute,
+      bookCreatingRoute,
+    ]),
   ]),
 });
 

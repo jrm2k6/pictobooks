@@ -8,6 +8,7 @@
     "PIPELINE_INITIAL_CANDIDATE_COUNT": "2",
     "LOCAL_CUSTOMER_API": "true",
     "IMAGE_PROVIDER": "mock",
+    "CLERK_JWKS_URL": "https://clerk.pictobook.app/.well-known/jwks.json",
   },
   "upload_source_maps": true,
   "observability": {

@@ -1,4 +1,4 @@
-import { AuthenticationError, SessionAuthenticator } from "./auth.js";
+import { AuthenticationError, JwtAuthenticator } from "./auth.js";
 import {
   ApiProblem,
   PipelineApi,
@@ -11,15 +11,55 @@ import { listLocalEditions } from "./editionCatalog.js";
 
 const MAX_JSON_BYTES = 64 * 1024;
 
+const CORS_ALLOWED_ORIGINS = [
+  "http://127.0.0.1:4176",
+  "https://studio.pictobook.app",
+];
+
+const corsHeaders = (origin: string): Record<string, string> => {
+  if (!CORS_ALLOWED_ORIGINS.includes(origin)) return {};
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers":
+      "Authorization, Content-Type, Idempotency-Key",
+  };
+};
+
+const addCors = (
+  response: Response,
+  cors: Record<string, string>
+): Response => {
+  if (Object.keys(cors).length === 0) return response;
+  const headers = new Headers(response.headers);
+  for (const [key, value] of Object.entries(cors)) {
+    headers.set(key, value);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+};
+
 export const handleApiRequest = async (
   request: Request,
   env: RuntimeEnv
 ): Promise<Response | null> => {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/v1/")) return null;
+
+  const origin = request.headers.get("origin") ?? "";
+  const cors = corsHeaders(origin);
+
+  // Handle CORS preflight before auth
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: cors });
+  }
+
   try {
-    const principal = await new SessionAuthenticator(
-      env.PIPELINE_DB
+    const principal = await new JwtAuthenticator(
+      env.CLERK_JWKS_URL
     ).authenticate(request);
     const localCustomerApi = env.LOCAL_CUSTOMER_API === "true";
     const api = new PipelineApi(
@@ -57,14 +97,17 @@ export const handleApiRequest = async (
       localCustomerApi
     );
     const response = await route(request, url, principal, api);
-    if (response instanceof Response) return response;
-    return Response.json(response.body, { status: response.status });
+    if (response instanceof Response) return addCors(response, cors);
+    return addCors(
+      Response.json(response.body, { status: response.status }),
+      cors
+    );
   } catch (error) {
     if (error instanceof AuthenticationError) {
-      return problem(401, "authentication_required");
+      return addCors(problem(401, "authentication_required"), cors);
     }
     if (error instanceof ApiProblem) {
-      return problem(error.status, error.code);
+      return addCors(problem(error.status, error.code), cors);
     }
     console.error(
       JSON.stringify({
@@ -74,7 +117,7 @@ export const handleApiRequest = async (
         error: error instanceof Error ? error.message : String(error),
       })
     );
-    return problem(500, "internal_error");
+    return addCors(problem(500, "internal_error"), cors);
   }
 };
 
@@ -158,6 +201,21 @@ const route = async (
     return api.listBooks(principal);
   }
 
+  const bookMatch = url.pathname.match(/^\/v1\/books\/([^/]+)$/);
+  if (request.method === "PATCH" && bookMatch) {
+    const body = await readJson<{
+      title?: string;
+      childName?: string;
+      childAge?: number;
+    }>(request);
+    return api.updateBook(
+      principal,
+      idempotencyKey(request),
+      safePathId(bookMatch[1]),
+      body
+    );
+  }
+
   const bookRuns = url.pathname.match(/^\/v1\/books\/([^/]+)\/runs$/);
   if (request.method === "GET" && bookRuns) {
     return api.listBookRuns(principal, safePathId(bookRuns[1]));
@@ -171,8 +229,12 @@ const route = async (
   }
 
   if (request.method === "POST" && url.pathname === "/v1/books") {
-    await readJson(request);
-    return api.createBook(principal, idempotencyKey(request));
+    const body = await readJson<{
+      title?: string;
+      childName?: string;
+      childAge?: number;
+    }>(request);
+    return api.createBook(principal, idempotencyKey(request), body);
   }
 
   const runs = url.pathname.match(/^\/v1\/books\/([^/]+)\/runs$/);
@@ -369,9 +431,13 @@ const requiredEnv = (
 };
 
 const problem = (status: number, code: string): Response =>
-  Response.json({ error: code }, { status });
+  Response.json(
+    { type: `/errors/${code}`, title: code, status, code },
+    { status }
+  );
 
 type RuntimeSecrets = {
+  CLERK_JWKS_URL: string;
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;
   GEMINI_API_KEY?: string;

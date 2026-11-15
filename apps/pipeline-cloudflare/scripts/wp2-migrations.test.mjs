@@ -124,7 +124,7 @@ try {
 
   execute(
     emptyState,
-    `INSERT INTO books VALUES ('book_1','owner_1','processing','${now}','${now}');
+    `INSERT INTO books (book_id, owner_id, status, created_at, updated_at) VALUES ('book_1','owner_1','processing','${now}','${now}');
      INSERT INTO book_runs VALUES ('run_1','book_1','running','pictobook-preschool-v0.1',100,0,'${now}','${now}',NULL);
      INSERT INTO photos VALUES ('photo_1','run_1',1,NULL,'accepted','${now}');
      INSERT INTO pages

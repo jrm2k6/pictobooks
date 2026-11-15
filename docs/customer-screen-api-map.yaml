@@ -8,15 +8,19 @@ sources:
   openapi: docs/customer-api.openapi.yaml
   screenCatalog: apps/web/screenCatalog.js
   stateMachine: apps/web/stateMachine.js
-  routeAndComponentRegistry: apps/web/main.jsx
+  routeAndComponentRegistry: apps/web/app.jsx
+  apiClient: apps/web/api-client.js
+  queryHooks: apps/web/hooks/
 operationStatus:
   listBooks:
     worker: partial
-    reactClient: disconnected
+    reactClient: connected
+    hook: useBooks (apps/web/hooks/use-books.js)
     details: Exists, but the response does not yet include target latest-run/page and order summaries.
   createBook:
     worker: partial
-    reactClient: disconnected
+    reactClient: connected
+    hook: useCreateBook (apps/web/hooks/use-create-book.js)
     details: Exists, but currently ignores the book title and child personalization fields.
   updateBook:
     worker: planned
@@ -26,23 +30,26 @@ operationStatus:
     reactClient: disconnected
   createBookRun:
     worker: implemented
-    reactClient: disconnected
-    details: Creates the run and upload intents. Local mode returns authenticated Worker upload URLs backed by local R2; React is not connected.
+    reactClient: connected
+    hook: useCreateBookRun (apps/web/hooks/use-create-book-run.js)
+    details: Creates the run and upload intents. Local mode returns authenticated Worker upload URLs backed by local R2; PhotoSelectionPage performs the direct PUT uploads.
   startBookRun:
     worker: implemented
-    reactClient: disconnected
+    reactClient: connected
+    details: Called from OrderPagesPage after updatePhotoOrder succeeds.
   getBookRun:
     worker: partial
-    reactClient: disconnected
-    details: Exists, but response serialization needs to match the camelCase nested target schema.
+    reactClient: connected
+    hook: useBookRun (apps/web/hooks/use-book-run.js)
+    details: Exists, but response serialization needs to match the camelCase nested target schema. Polled every 2 s while run is active.
   refreshUploadIntent:
     worker: implemented
     reactClient: disconnected
     details: Local-only authenticated Worker URL refresh; preview/prod remain on the separate R2 presigner path.
   updatePhotoOrder:
     worker: implemented
-    reactClient: disconnected
-    details: Persists exact 5–10 photo order for a created owner-scoped run; idempotency is handled by the API layer.
+    reactClient: connected
+    details: Called from OrderPagesPage before startBookRun; idempotency is handled by the API layer.
   reviewCandidate:
     worker: implemented
     reactClient: disconnected
@@ -89,8 +96,8 @@ screens:
   - id: library
     title: My books
     route: /books
-    component: apps/web/screens/BookshelfScreen.jsx
-    reactStatus: disconnected
+    component: apps/web/books-page.jsx
+    reactStatus: connected
     reads:
       - operationId: listBooks
         hook: useBooksQuery
@@ -115,9 +122,10 @@ screens:
 
   - id: empty
     title: First visit
-    route: /welcome
-    component: apps/web/screens/FirstVisitScreen.jsx
-    reactStatus: disconnected
+    route: /books
+    component: apps/web/books-page.jsx
+    note: EmptyState is rendered inline in BooksPage when useBooks() returns an empty array.
+    reactStatus: connected
     reads: []
     actions:
       - event: Start a book
@@ -163,8 +171,8 @@ screens:
   - id: create
     title: Book details
     route: /books/new/details
-    component: apps/web/screens/BookDetailsScreen.jsx
-    reactStatus: disconnected
+    component: apps/web/pages/book-details-page.jsx
+    reactStatus: connected
     reads: []
     actions:
       - event: Save new book details
@@ -179,8 +187,8 @@ screens:
   - id: upload
     title: Choose photos
     route: /books/new/photos
-    component: apps/web/screens/PhotoSelectionScreen.jsx
-    reactStatus: disconnected
+    component: apps/web/pages/photo-selection-page.jsx
+    reactStatus: connected
     reads: []
     actions:
       - event: Continue with selected photos
@@ -193,8 +201,8 @@ screens:
   - id: arrange
     title: Order the pages
     route: /books/new/order
-    component: apps/web/screens/OrderPagesScreen.jsx
-    reactStatus: disconnected
+    component: apps/web/pages/order-pages-page.jsx
+    reactStatus: connected
     reads:
       - operationId: getBookRun
         hook: useBookRunQuery
@@ -214,8 +222,8 @@ screens:
   - id: processing
     title: Pages are being made
     route: /books/new/creating
-    component: apps/web/screens/ProcessingScreen.jsx
-    reactStatus: disconnected
+    component: apps/web/pages/processing-page.jsx
+    reactStatus: connected
     reads:
       - operationId: getBookRun
         hook: useBookRunQuery
