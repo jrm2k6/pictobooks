@@ -8,6 +8,10 @@ import {
 } from "@clerk/react";
 import "./tokens.css";
 import { BooksPage } from "./books-page.jsx";
+import { BookDetailsPage } from "./pages/book-details-page.jsx";
+import { PhotoSelectionPage } from "./pages/photo-selection-page.jsx";
+import { OrderPagesPage } from "./pages/order-pages-page.jsx";
+import { ProcessingPage } from "./pages/processing-page.jsx";
 import { AuthLayout, clerkAppearance } from "./auth-layout.jsx";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -112,12 +116,56 @@ const booksRoute = createRoute({
   component: BooksPage,
 });
 
+// ── Book creation wizard ───────────────────────────────────────────────
+
+/** /books/new → redirect to /books/new/details */
+const booksNewRoute = createRoute({
+  getParentRoute: () => authedLayout,
+  path: "/books/new",
+  beforeLoad: () => {
+    throw redirect({ to: "/books/new/details" });
+  },
+});
+
+const bookDetailsRoute = createRoute({
+  getParentRoute: () => authedLayout,
+  path: "/books/new/details",
+  component: BookDetailsPage,
+});
+
+const bookPhotosRoute = createRoute({
+  getParentRoute: () => authedLayout,
+  path: "/books/new/photos",
+  component: PhotoSelectionPage,
+});
+
+const bookOrderRoute = createRoute({
+  getParentRoute: () => authedLayout,
+  path: "/books/new/order",
+  component: OrderPagesPage,
+});
+
+const bookCreatingRoute = createRoute({
+  getParentRoute: () => authedLayout,
+  path: "/books/new/creating",
+  component: ProcessingPage,
+});
+
+// ── Router ─────────────────────────────────────────────────────────────
+
 const router = createRouter({
   routeTree: rootRoute.addChildren([
     indexRoute,
     signInLayout.addChildren([signInSubRoute]),
     signUpLayout.addChildren([signUpSubRoute]),
-    authedLayout.addChildren([booksRoute]),
+    authedLayout.addChildren([
+      booksRoute,
+      booksNewRoute,
+      bookDetailsRoute,
+      bookPhotosRoute,
+      bookOrderRoute,
+      bookCreatingRoute,
+    ]),
   ]),
 });
 

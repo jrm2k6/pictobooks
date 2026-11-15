@@ -1,43 +1,160 @@
-.emptyState {
+/* ── BooksPage ─────────────────────────────────────────────────────────── */
+
+/* ── Skeleton ─────────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeletonGrid {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+}
+
+.skeletonCard {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.skeletonThumb {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+  background: linear-gradient(90deg, var(--color-border) 25%, var(--color-offwhite) 50%, var(--color-border) 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+.skeletonLines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skeletonLine {
+  height: 14px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--color-border) 25%, var(--color-offwhite) 50%, var(--color-border) 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* ── Empty state ──────────────────────────────────────────────────────── */
+.emptyState {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: center;
+  min-height: 400px;
+}
+
+@media (max-width: 600px) {
+  .emptyState {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+}
+
+.emptyArt {
+  position: relative;
+  display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 360px;
-  text-align: center;
+  height: 240px;
+}
+
+.emptyBlob {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 50%, oklch(from var(--color-coral) l c h / 0.1) 0%, transparent 70%);
+  border-radius: 60% 40% 40% 60% / 60% 60% 40% 40%;
+}
+
+.emptyIcon {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  background: var(--color-offwhite);
+  border: 2px dashed oklch(from var(--color-coral) l c h / 0.4);
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.emptyCopy {
+  display: flex;
+  flex-direction: column;
   gap: 16px;
 }
 
-.iconWrap {
-  width: 72px;
-  height: 72px;
-  border-radius: 20px;
-  background: var(--color-offwhite);
-  border: 1.5px dashed oklch(from var(--color-coral) l c h / 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.emptyEyebrow {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-coral);
 }
 
-.heading {
+.emptyHeading {
   font-family: var(--font-heading);
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 700;
   color: var(--color-text);
-  margin: 0 0 6px;
+  margin: 0;
+  line-height: 1.25;
 }
 
-.subheading {
+.emptyBody {
   font-family: var(--font-body);
   font-size: 15px;
   color: var(--color-text-secondary);
   margin: 0;
+  line-height: 1.6;
 }
 
-.cta {
-  margin-top: 8px;
+.checkList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.checkList li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--color-text-secondary);
+
+  &::before {
+    content: '✓';
+    color: var(--color-coral);
+    font-weight: 700;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+}
+
+/* ── Shared CTA ───────────────────────────────────────────────────────── */
+.ctaBtn {
+  display: inline-flex;
+  align-items: center;
   background: var(--color-coral);
   color: #fff;
+  text-decoration: none;
   border: none;
   border-radius: var(--radius-md);
   padding: 12px 24px;
@@ -46,8 +163,215 @@
   font-weight: 700;
   cursor: pointer;
   transition: filter 0.15s;
+  align-self: flex-start;
 
   &:hover {
     filter: brightness(1.08);
   }
+}
+
+/* ── Book list header ─────────────────────────────────────────────────── */
+.listHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+@media (max-width: 540px) {
+  .listHeader {
+    flex-direction: column;
+  }
+}
+
+.listHeading {
+  font-family: var(--font-heading);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 6px;
+}
+
+.listSub {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+/* ── Book grid ────────────────────────────────────────────────────────── */
+.bookGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bookCard {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  transition: box-shadow 0.15s;
+
+  &:hover {
+    box-shadow: 0 2px 14px oklch(0.22 0.04 255 / 0.08);
+  }
+}
+
+.bookCardThumb {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-md);
+  background: oklch(from var(--color-coral) l c h / 0.07);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bookIcon {
+  display: block;
+}
+
+.bookCardBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bookCardMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.activePill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-coral);
+  background: oklch(from var(--color-coral) l c h / 0.1);
+  border-radius: var(--radius-pill);
+  padding: 3px 8px;
+}
+
+.activeDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-coral);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.statusLabel {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.bookCardTitle {
+  font-family: var(--font-heading);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bookCardSub {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.bookCardActions {
+  flex-shrink: 0;
+}
+
+.openBtn {
+  display: inline-block;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-navy);
+  text-decoration: none;
+  padding: 8px 14px;
+  border: 1.5px solid var(--color-navy);
+  border-radius: var(--radius-md);
+  transition: background 0.15s;
+  white-space: nowrap;
+
+  &:hover {
+    background: oklch(from var(--color-navy) l c h / 0.06);
+  }
+}
+
+/* ── Info callout ─────────────────────────────────────────────────────── */
+.infoCallout {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  background: oklch(from var(--color-gold) l c h / 0.12);
+  border: 1px solid oklch(from var(--color-gold) l c h / 0.35);
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-top: 24px;
+}
+
+.infoIcon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-gold);
+  color: var(--color-navy);
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Error state ──────────────────────────────────────────────────────── */
+.errorState {
+  display: flex;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+.errorMsg {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: oklch(0.55 0.18 25);
+  background: oklch(0.97 0.03 25);
+  border: 1px solid oklch(0.85 0.1 25);
+  border-radius: var(--radius-md);
+  padding: 14px 20px;
+  margin: 0;
 }
