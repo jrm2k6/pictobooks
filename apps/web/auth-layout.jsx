@@ -20,8 +20,22 @@ export const clerkAppearance = {
   },
   elements: {
     rootBox: { width: "100%", maxWidth: "100%", minWidth: 0 },
-    cardBox: { width: "100%", maxWidth: "100%", minWidth: 0, boxShadow: "none", border: "none", overflow: "visible", padding: "0 4px" },
-    card: { gap: "0px", padding: "16px 0", backgroundColor: "transparent", boxShadow: "none", border: "none" },
+    cardBox: {
+      width: "100%",
+      maxWidth: "100%",
+      minWidth: 0,
+      boxShadow: "none",
+      border: "none",
+      overflow: "visible",
+      padding: "0 4px",
+    },
+    card: {
+      gap: "0px",
+      padding: "16px 0",
+      backgroundColor: "transparent",
+      boxShadow: "none",
+      border: "none",
+    },
     main: { gap: "16px" },
     form: { gap: "12px" },
     header: { display: "none" },
@@ -38,15 +52,26 @@ export const clerkAppearance = {
 function StoryPanel() {
   return (
     <section className="login-story" aria-labelledby="story-title">
-      <a className="login-brand" href="https://pictobook.app/" aria-label="Pictobook home">
+      <a
+        className="login-brand"
+        href="https://pictobook.app/"
+        aria-label="Pictobook home"
+      >
         <img src="/images/pictobook-logo.webp" alt="" height="32" />
         <span>Pictobook</span>
       </a>
 
       <div className="story-copy">
-        <span className="login-eyebrow"><span aria-hidden="true">✳</span> A little more magic at home</span>
-        <h1 id="story-title">Their favorite moments, made <em>colorful.</em></h1>
-        <p>Turn the photos you love into a coloring book made just for your child.</p>
+        <span className="login-eyebrow">
+          <span aria-hidden="true">✳</span> A little more magic at home
+        </span>
+        <h1 id="story-title">
+          Their favorite moments, made <em>colorful.</em>
+        </h1>
+        <p>
+          Turn the photos you love into a coloring book made just for your
+          child.
+        </p>
       </div>
 
       <div className="book-illustration" aria-hidden="true">
@@ -74,20 +99,35 @@ function StoryPanel() {
             <span className="page-caption">made just for you</span>
           </div>
         </div>
-        <span className="floating-star star-one" aria-hidden="true">✳</span>
-        <span className="floating-star star-two" aria-hidden="true">✦</span>
+        <span className="floating-star star-one" aria-hidden="true">
+          ✳
+        </span>
+        <span className="floating-star star-two" aria-hidden="true">
+          ✦
+        </span>
         <span className="floating-dot dot-one" aria-hidden="true" />
         <span className="floating-dot dot-two" aria-hidden="true" />
       </div>
 
       <div className="story-footnote">
-        <span className="footnote-check" aria-hidden="true">✓</span> A keepsake made from your family's own stories
+        <span className="footnote-check" aria-hidden="true">
+          ✓
+        </span>{" "}
+        A keepsake made from your family's own stories
       </div>
     </section>
   );
 }
 
-export function AuthLayout({ kicker, heading, intro, toggleText, toggleHref, toggleLinkText, children }) {
+export function AuthLayout({
+  kicker,
+  heading,
+  intro,
+  toggleText,
+  toggleHref,
+  toggleLinkText,
+  children,
+}) {
   return (
     <main className="login-page">
       <StoryPanel />
@@ -104,13 +144,18 @@ export function AuthLayout({ kicker, heading, intro, toggleText, toggleHref, tog
           {toggleText && (
             <p className={styles.toggleRow}>
               {toggleText}{" "}
-              <a href={toggleHref} className={styles.toggleLink}>{toggleLinkText}</a>
+              <a href={toggleHref} className={styles.toggleLink}>
+                {toggleLinkText}
+              </a>
             </p>
           )}
           <p className={`login-legal ${styles.legal}`}>
             By continuing, you agree to our{" "}
             <a href="https://pictobook.app/legal/terms-of-service">Terms</a> and{" "}
-            <a href="https://pictobook.app/legal/privacy-policy">Privacy Policy</a>.
+            <a href="https://pictobook.app/legal/privacy-policy">
+              Privacy Policy
+            </a>
+            .
           </p>
         </div>
         <footer className="login-footer">

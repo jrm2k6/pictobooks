@@ -29,10 +29,17 @@ function getSiteUrl() {
 
 function toAbsoluteUrl(siteUrl: string, value: string) {
   if (/^https?:\/\//.test(value)) return value;
-  return new URL(value.startsWith("/") ? value : `/${value}`, siteUrl).toString();
+  return new URL(
+    value.startsWith("/") ? value : `/${value}`,
+    siteUrl
+  ).toString();
 }
 
-function upsertMeta(attribute: "name" | "property", key: string, content: string) {
+function upsertMeta(
+  attribute: "name" | "property",
+  key: string,
+  content: string
+) {
   let tag = document.head.querySelector<HTMLMetaElement>(
     `meta[${attribute}="${key}"]`
   );

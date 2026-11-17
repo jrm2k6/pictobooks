@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearch } from '@tanstack/react-router';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { WizardShell } from './wizard-shell.jsx';
-import { useApiClient } from '../api-client.js';
-import styles from './order-pages-page.module.css';
+import React, { useState, useEffect } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { WizardShell } from "./wizard-shell.jsx";
+import { useApiClient } from "../api-client.js";
+import styles from "./order-pages-page.module.css";
 
 /**
  * Step 3 of 4 — Order the pages.
@@ -39,15 +39,19 @@ export function OrderPagesPage() {
     }
   }, [runId]);
 
-  const { mutateAsync: startRun, isPending, error } = useMutation({
+  const {
+    mutateAsync: startRun,
+    isPending,
+    error,
+  } = useMutation({
     mutationFn: async () => {
-      const photoIds = photos.map((p) => p.photoId);
+      const photoIds = photos.map(p => p.photoId);
       await api.updatePhotoOrder(bookId, runId, photoIds);
       await api.startBookRun(bookId, runId);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['books'] });
-      queryClient.invalidateQueries({ queryKey: ['book-run', bookId, runId] });
+      queryClient.invalidateQueries({ queryKey: ["books"] });
+      queryClient.invalidateQueries({ queryKey: ["book-run", bookId, runId] });
       // Clear photo metadata from sessionStorage now that run is started
       try {
         sessionStorage.removeItem(`pictobook_photos_${runId}`);
@@ -59,7 +63,7 @@ export function OrderPagesPage() {
 
   function movePhoto(fromIndex, toIndex) {
     if (toIndex < 0 || toIndex >= photos.length) return;
-    setPhotos((prev) => {
+    setPhotos(prev => {
       const updated = [...prev];
       const [removed] = updated.splice(fromIndex, 1);
       updated.splice(toIndex, 0, removed);
@@ -69,7 +73,7 @@ export function OrderPagesPage() {
 
   async function handleMakePages() {
     await startRun();
-    navigate({ to: '/books/new/creating', search: { bookId, runId } });
+    navigate({ to: "/books/new/creating", search: { bookId, runId } });
   }
 
   return (
@@ -88,20 +92,16 @@ export function OrderPagesPage() {
           {photos.map((photo, index) => (
             <li key={photo.photoId} className={styles.item}>
               <span className={styles.pageNum} aria-label={`Page ${index + 1}`}>
-                {String(index + 1).padStart(2, '0')}
+                {String(index + 1).padStart(2, "0")}
               </span>
               {photo.preview ? (
-                <img
-                  src={photo.preview}
-                  alt=""
-                  className={styles.thumb}
-                />
+                <img src={photo.preview} alt="" className={styles.thumb} />
               ) : (
                 <div className={styles.thumbPlaceholder} aria-hidden="true" />
               )}
               <span className={styles.photoName}>
                 <strong>{photo.name ?? `Photo ${index + 1}`}</strong>
-                <small>Page {String(index + 1).padStart(2, '0')}</small>
+                <small>Page {String(index + 1).padStart(2, "0")}</small>
               </span>
               <span className={styles.actions}>
                 <button
@@ -128,31 +128,35 @@ export function OrderPagesPage() {
         </ol>
       ) : (
         <p className={styles.noPhotos}>
-          Photo order could not be loaded. Try going back and re-selecting your photos.
+          Photo order could not be loaded. Try going back and re-selecting your
+          photos.
         </p>
       )}
 
       <div className={styles.callout} role="note">
-        <span className={styles.calloutIcon} aria-hidden="true">i</span>
+        <span className={styles.calloutIcon} aria-hidden="true">
+          i
+        </span>
         <span>
-          Your book will have{' '}
+          Your book will have{" "}
           <strong>
-            {photos.length} {photos.length === 1 ? 'page' : 'pages'} plus a
+            {photos.length} {photos.length === 1 ? "page" : "pages"} plus a
             personalised cover.
-          </strong>{' '}
+          </strong>{" "}
           You can review each one before ordering.
         </span>
       </div>
 
       {error && (
         <p className={styles.errorMsg} role="alert">
-          {error.message ?? 'Something went wrong. Please try again.'}
+          {error.message ?? "Something went wrong. Please try again."}
         </p>
       )}
 
       <div className={styles.footer}>
         <span className={styles.footerNote}>
-          Generation usually takes a few minutes. We'll let you know when it's ready.
+          Generation usually takes a few minutes. We'll let you know when it's
+          ready.
         </span>
         <button
           type="button"
@@ -160,7 +164,7 @@ export function OrderPagesPage() {
           disabled={photos.length === 0 || isPending}
           onClick={handleMakePages}
         >
-          {isPending ? 'Starting…' : 'Make the pages →'}
+          {isPending ? "Starting…" : "Make the pages →"}
         </button>
       </div>
     </WizardShell>

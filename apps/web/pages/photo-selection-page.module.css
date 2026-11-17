@@ -44,7 +44,9 @@
   border-radius: var(--radius-lg);
   background: var(--color-offwhite);
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
   text-align: center;
 
   &:hover {
@@ -210,7 +212,9 @@
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  transition: filter 0.15s, opacity 0.15s;
+  transition:
+    filter 0.15s,
+    opacity 0.15s;
   white-space: nowrap;
 
   &:hover:not(:disabled) {

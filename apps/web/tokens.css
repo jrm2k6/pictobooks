@@ -14,8 +14,8 @@
   --color-text-muted: #a2aaa9;
 
   /* Typography */
-  --font-heading: 'Fraunces', Georgia, serif;
-  --font-body: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
+  --font-heading: "Fraunces", Georgia, serif;
+  --font-body: "Plus Jakarta Sans", "Segoe UI", sans-serif;
 
   /* Radii */
   --radius-sm: 8px;

@@ -31,11 +31,11 @@ A valid DMCA notice must include the following:
 1. Identification of the copyrighted work claimed to be infringed.
 2. Identification of the material that is claimed to be infringing and its location within the Service.
 3. Your contact information, including:
+   - name
+   - mailing address
+   - telephone number
+   - email address
 
-   * name
-   * mailing address
-   * telephone number
-   * email address
 4. A statement that you have a **good faith belief** that the disputed use is not authorized by the copyright owner, its agent, or the law.
 5. A statement that the information in the notification is **accurate**, and under penalty of perjury, that you are the copyright owner or authorized to act on behalf of the owner.
 6. Your **physical or electronic signature**.
@@ -50,9 +50,9 @@ DMCA notices should be sent to:
 
 Upon receiving a valid DMCA notice, Pictobook may:
 
-* remove or disable access to the allegedly infringing material
-* notify the user who uploaded the content
-* take further action where appropriate
+- remove or disable access to the allegedly infringing material
+- notify the user who uploaded the content
+- take further action where appropriate
 
 ---
 

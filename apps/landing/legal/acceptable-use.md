@@ -28,9 +28,9 @@ You agree not to upload, generate, distribute, or otherwise use the Service to c
 
 Content that infringes the rights of others, including:
 
-* copyrighted images without permission
-* trademarked characters or brand assets
-* images protected by intellectual property laws
+- copyrighted images without permission
+- trademarked characters or brand assets
+- images protected by intellectual property laws
 
 Examples may include copyrighted characters from movies, television, or games when you do not have permission to use them.
 
@@ -42,9 +42,9 @@ Content that violates any applicable law or regulation.
 
 This includes, but is not limited to:
 
-* fraud
-* harassment
-* unlawful distribution of copyrighted materials
+- fraud
+- harassment
+- unlawful distribution of copyrighted materials
 
 ---
 
@@ -60,10 +60,10 @@ Any such material may be reported to appropriate authorities.
 
 Content that promotes:
 
-* hate speech
-* harassment
-* discrimination
-* threats or violence against individuals or groups
+- hate speech
+- harassment
+- discrimination
+- threats or violence against individuals or groups
 
 ---
 
@@ -77,10 +77,10 @@ Sexually explicit or pornographic content is not permitted on the platform.
 
 You may not upload files or content that contain:
 
-* malware
-* viruses
-* malicious scripts
-* attempts to exploit system vulnerabilities
+- malware
+- viruses
+- malicious scripts
+- attempts to exploit system vulnerabilities
 
 ---
 
@@ -88,11 +88,11 @@ You may not upload files or content that contain:
 
 You may not use the Service to:
 
-* attempt to reverse engineer the platform
-* scrape or extract large amounts of data
-* use automated bots without permission
-* overload or disrupt the Service infrastructure
-* circumvent security or access controls
+- attempt to reverse engineer the platform
+- scrape or extract large amounts of data
+- use automated bots without permission
+- overload or disrupt the Service infrastructure
+- circumvent security or access controls
 
 ---
 
@@ -102,10 +102,10 @@ Pictobook reserves the right to take action against violations of this Policy.
 
 Actions may include:
 
-* removing offending content
-* suspending or terminating accounts
-* restricting access to the Service
-* reporting illegal activities to authorities
+- removing offending content
+- suspending or terminating accounts
+- restricting access to the Service
+- reporting illegal activities to authorities
 
 ---
 

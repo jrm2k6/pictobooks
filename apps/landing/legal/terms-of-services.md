@@ -32,10 +32,10 @@ Certain features of the Service may require you to create an account.
 
 When creating an account, you agree to:
 
-* Provide accurate and complete information
-* Keep your login credentials secure
-* Notify us immediately of unauthorized account use
-* Be responsible for all activity under your account
+- Provide accurate and complete information
+- Keep your login credentials secure
+- Notify us immediately of unauthorized account use
+- Be responsible for all activity under your account
 
 We reserve the right to suspend or terminate accounts that violate these Terms.
 
@@ -49,11 +49,11 @@ You retain ownership of the content you upload.
 
 However, by uploading User Content, you grant Pictobook a **worldwide, non-exclusive, royalty-free license** to:
 
-* Store the content
-* Process the content
-* Generate derivative creative materials
-* Deliver digital or printed products
-* Improve the functionality of the Service
+- Store the content
+- Process the content
+- Generate derivative creative materials
+- Deliver digital or printed products
+- Improve the functionality of the Service
 
 This license is granted solely for the purpose of operating and improving the Service.
 
@@ -63,15 +63,15 @@ This license is granted solely for the purpose of operating and improving the Se
 
 You represent and warrant that:
 
-* You **own the content** you upload, or
-* You have obtained **permission from the rights holder** to upload and use the content.
+- You **own the content** you upload, or
+- You have obtained **permission from the rights holder** to upload and use the content.
 
 You agree not to upload content that:
 
-* Infringes intellectual property rights
-* Contains illegal material
-* Depicts abuse or exploitation
-* Violates applicable laws or regulations
+- Infringes intellectual property rights
+- Contains illegal material
+- Depicts abuse or exploitation
+- Violates applicable laws or regulations
 
 You are solely responsible for the content you upload.
 
@@ -95,9 +95,9 @@ Payments may be processed through third-party providers.
 
 By making a purchase, you agree to:
 
-* Provide valid payment information
-* Pay all applicable fees and taxes
-* Comply with the policies of payment providers
+- Provide valid payment information
+- Pay all applicable fees and taxes
+- Comply with the policies of payment providers
 
 ---
 
@@ -105,9 +105,9 @@ By making a purchase, you agree to:
 
 If physical products are offered through the Service:
 
-* Delivery times are estimates
-* Shipping delays may occur due to external carriers
-* Pictobook is not responsible for delays caused by shipping providers
+- Delivery times are estimates
+- Shipping delays may occur due to external carriers
+- Pictobook is not responsible for delays caused by shipping providers
 
 Additional details are described in the **Refund and Fulfillment Policy**.
 
@@ -117,11 +117,11 @@ Additional details are described in the **Refund and Fulfillment Policy**.
 
 You agree not to use the Service to:
 
-* Upload copyrighted content without permission
-* Generate illegal or harmful materials
-* Attempt to reverse engineer the Service
-* Interfere with or disrupt our infrastructure
-* Use automated scraping or bots without permission
+- Upload copyrighted content without permission
+- Generate illegal or harmful materials
+- Attempt to reverse engineer the Service
+- Interfere with or disrupt our infrastructure
+- Use automated scraping or bots without permission
 
 Violation of these rules may result in suspension or termination of access.
 
@@ -131,9 +131,9 @@ Violation of these rules may result in suspension or termination of access.
 
 We reserve the right to suspend or terminate accounts that:
 
-* Violate these Terms
-* Abuse the Service
-* Pose legal or security risks
+- Violate these Terms
+- Abuse the Service
+- Pose legal or security risks
 
 Termination may occur without prior notice.
 
@@ -145,9 +145,9 @@ The Service is provided **"as is"** and **"as available."**
 
 Pictobook makes no warranties regarding:
 
-* Reliability of the Service
-* Accuracy of generated content
-* Availability or uptime
+- Reliability of the Service
+- Accuracy of generated content
+- Availability or uptime
 
 ---
 
@@ -155,10 +155,10 @@ Pictobook makes no warranties regarding:
 
 To the maximum extent permitted by law, Pictobook shall not be liable for:
 
-* Indirect or consequential damages
-* Loss of data
-* Loss of profits
-* Damages resulting from user-uploaded content or generated materials
+- Indirect or consequential damages
+- Loss of data
+- Loss of profits
+- Damages resulting from user-uploaded content or generated materials
 
 Use of the Service is at your own risk.
 

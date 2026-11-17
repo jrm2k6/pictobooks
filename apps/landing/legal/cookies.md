@@ -16,10 +16,10 @@ Cookies are small text files stored on your device when you visit a website.
 
 They allow websites to remember information about your visit, such as:
 
-* login sessions
-* user preferences
-* analytics data
-* site performance information
+- login sessions
+- user preferences
+- analytics data
+- site performance information
 
 Cookies help improve the functionality and usability of websites.
 
@@ -29,11 +29,11 @@ Cookies help improve the functionality and usability of websites.
 
 Pictobook uses cookies to:
 
-* maintain user sessions
-* enable core functionality of the Service
-* analyze how users interact with the website
-* improve product performance and user experience
-* detect abuse or security issues
+- maintain user sessions
+- enable core functionality of the Service
+- analyze how users interact with the website
+- improve product performance and user experience
+- detect abuse or security issues
 
 ---
 
@@ -45,9 +45,9 @@ These cookies are necessary for the basic operation of the Service.
 
 Examples include:
 
-* authentication cookies
-* session management
-* security-related cookies
+- authentication cookies
+- session management
+- security-related cookies
 
 Without these cookies, the website may not function properly.
 
@@ -59,10 +59,10 @@ Analytics cookies help us understand how visitors interact with the Service.
 
 They may collect information such as:
 
-* pages visited
-* time spent on pages
-* navigation behavior
-* device or browser information
+- pages visited
+- time spent on pages
+- navigation behavior
+- device or browser information
 
 This information helps us improve our website and services.
 
@@ -74,8 +74,8 @@ Functional cookies remember preferences and settings that enhance your experienc
 
 Examples include:
 
-* language preferences
-* interface settings
+- language preferences
+- interface settings
 
 ---
 
@@ -83,9 +83,9 @@ Examples include:
 
 Some cookies may be set by third-party services integrated with the website, such as:
 
-* analytics providers
-* payment processors
-* hosting platforms
+- analytics providers
+- payment processors
+- hosting platforms
 
 These third parties may collect information according to their own privacy policies.
 
@@ -97,9 +97,9 @@ Most web browsers allow you to control cookies through browser settings.
 
 You can typically:
 
-* delete cookies
-* block cookies
-* receive notifications when cookies are set
+- delete cookies
+- block cookies
+- receive notifications when cookies are set
 
 Please note that disabling cookies may affect the functionality of certain features of the Service.
 

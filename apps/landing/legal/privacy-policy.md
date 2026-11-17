@@ -18,12 +18,12 @@ By using the Service, you agree to the collection and use of information in acco
 
 We may collect personal information that you provide directly when using the Service, including:
 
-* Name
-* Email address
-* Account credentials
-* Uploaded photos or images
-* Customer support communications
-* Payment-related information (processed by third-party providers)
+- Name
+- Email address
+- Account credentials
+- Uploaded photos or images
+- Customer support communications
+- Payment-related information (processed by third-party providers)
 
 ---
 
@@ -41,13 +41,13 @@ Unless otherwise stated, we **do not claim ownership** of the images you upload.
 
 When you access the Service, we may automatically collect information such as:
 
-* IP address
-* Browser type
-* Device information
-* Operating system
-* Pages visited
-* Interaction with the Service
-* Cookies and similar technologies
+- IP address
+- Browser type
+- Device information
+- Operating system
+- Pages visited
+- Interaction with the Service
+- Cookies and similar technologies
 
 ---
 
@@ -55,14 +55,14 @@ When you access the Service, we may automatically collect information such as:
 
 We use collected information to:
 
-* Provide and operate the Service
-* Process uploaded images
-* Generate coloring books and creative materials
-* Deliver digital or physical products
-* Provide customer support
-* Improve and maintain our technology
-* Detect and prevent fraud, abuse, or security issues
-* Comply with legal obligations
+- Provide and operate the Service
+- Process uploaded images
+- Generate coloring books and creative materials
+- Deliver digital or physical products
+- Provide customer support
+- Improve and maintain our technology
+- Detect and prevent fraud, abuse, or security issues
+- Comply with legal obligations
 
 ---
 
@@ -74,9 +74,9 @@ These processes occur automatically without manual human review in most cases.
 
 Limited human review may occur for:
 
-* customer support
-* safety and abuse prevention
-* quality improvement
+- customer support
+- safety and abuse prevention
+- quality improvement
 
 ---
 
@@ -86,11 +86,11 @@ We do **not sell personal data**.
 
 We may share information with trusted service providers that help operate the Service, including:
 
-* cloud hosting providers
-* payment processors
-* analytics providers
-* printing and fulfillment partners
-* customer support platforms
+- cloud hosting providers
+- payment processors
+- analytics providers
+- printing and fulfillment partners
+- customer support platforms
 
 These third parties receive only the information necessary to perform their services.
 
@@ -100,10 +100,10 @@ These third parties receive only the information necessary to perform their serv
 
 We retain personal information only as long as necessary to:
 
-* operate the Service
-* fulfill purchases and orders
-* comply with legal obligations
-* resolve disputes
+- operate the Service
+- fulfill purchases and orders
+- comply with legal obligations
+- resolve disputes
 
 Uploaded images may be deleted after processing or after a defined retention period.
 
@@ -123,11 +123,11 @@ Users are responsible for safeguarding their account credentials.
 
 Depending on your location, you may have rights including:
 
-* Access to personal data
-* Correction of inaccurate data
-* Deletion of personal data
-* Restriction of processing
-* Data portability
+- Access to personal data
+- Correction of inaccurate data
+- Deletion of personal data
+- Restriction of processing
+- Data portability
 
 To exercise these rights, contact us using the information below.
 

@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
-import { useApiClient, UnauthorizedError } from '../api-client.js';
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { useApiClient, UnauthorizedError } from "../api-client.js";
 
 /**
  * Query hook: load the signed-in customer's book library.
@@ -13,14 +13,14 @@ export function useBooks() {
   const navigate = useNavigate();
 
   return useQuery({
-    queryKey: ['books'],
+    queryKey: ["books"],
     queryFn: async () => {
       try {
         const data = await api.listBooks();
         return data.books ?? [];
       } catch (err) {
         if (err instanceof UnauthorizedError) {
-          navigate({ to: '/sign-in' });
+          navigate({ to: "/sign-in" });
           return [];
         }
         throw err;

@@ -20,23 +20,43 @@ export default function FirstVisitScreen({ onNavigate }) {
           child can make their own.
         </p>
         <div className="micro-list">
-          <span><i className="check" aria-hidden="true">✓</i> A page inspired by every photo</span>
-          <span><i className="check" aria-hidden="true">✓</i> Made for ages 3–12</span>
-          <span><i className="check" aria-hidden="true">✓</i> Preview before you order</span>
+          <span>
+            <i className="check" aria-hidden="true">
+              ✓
+            </i>{" "}
+            A page inspired by every photo
+          </span>
+          <span>
+            <i className="check" aria-hidden="true">
+              ✓
+            </i>{" "}
+            Made for ages 3–12
+          </span>
+          <span>
+            <i className="check" aria-hidden="true">
+              ✓
+            </i>{" "}
+            Preview before you order
+          </span>
         </div>
         <button
           className="button primary"
           type="button"
           onClick={() => onNavigate("create", "Start a book")}
         >
-          Start a book <span className="arrow" aria-hidden="true">→</span>
+          Start a book{" "}
+          <span className="arrow" aria-hidden="true">
+            →
+          </span>
         </button>
         <div style={{ marginTop: 10 }}>
           <button
             className="button ghost"
             type="button"
             onClick={() => onNavigate("upload", "See how it works")}
-          >See how it works</button>
+          >
+            See how it works
+          </button>
         </div>
       </div>
     </div>

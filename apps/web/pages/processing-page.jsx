@@ -1,11 +1,11 @@
-import React, { useEffect } from 'react';
-import { useNavigate, useSearch } from '@tanstack/react-router';
-import { WizardShell } from './wizard-shell.jsx';
-import { useBookRun } from '../hooks/use-book-run.js';
-import styles from './processing-page.module.css';
+import React, { useEffect } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { WizardShell } from "./wizard-shell.jsx";
+import { useBookRun } from "../hooks/use-book-run.js";
+import styles from "./processing-page.module.css";
 
-const TERMINAL_COMPLETE = new Set(['completed', 'partially_completed']);
-const TERMINAL_FAILED = new Set(['failed', 'cancelled']);
+const TERMINAL_COMPLETE = new Set(["completed", "partially_completed"]);
+const TERMINAL_FAILED = new Set(["failed", "cancelled"]);
 
 /**
  * Step 4 of 4 — Processing.
@@ -22,13 +22,14 @@ export function ProcessingPage() {
   useEffect(() => {
     if (!run) return;
     if (TERMINAL_COMPLETE.has(run.status)) {
-      navigate({ to: '/books' });
+      navigate({ to: "/books" });
     }
   }, [run?.status]);
 
   const totalPages = run?.totalPageCount ?? 0;
   const readyPages = run?.readyPageCount ?? 0;
-  const progress = totalPages > 0 ? Math.round((readyPages / totalPages) * 100) : 0;
+  const progress =
+    totalPages > 0 ? Math.round((readyPages / totalPages) * 100) : 0;
   const isFailed = run ? TERMINAL_FAILED.has(run.status) : false;
 
   return (
@@ -44,17 +45,20 @@ export function ProcessingPage() {
 
       {isFailed || isError ? (
         <div className={styles.errorState} role="alert">
-          <div className={styles.errorIcon} aria-hidden="true">!</div>
+          <div className={styles.errorIcon} aria-hidden="true">
+            !
+          </div>
           <div>
             <strong className={styles.errorTitle}>Something went wrong</strong>
             <p className={styles.errorDetail}>
-              {error?.message ?? 'The book run failed. Please try creating a new book.'}
+              {error?.message ??
+                "The book run failed. Please try creating a new book."}
             </p>
           </div>
           <button
             type="button"
             className={styles.secondaryBtn}
-            onClick={() => navigate({ to: '/books' })}
+            onClick={() => navigate({ to: "/books" })}
           >
             Back to my books
           </button>
@@ -64,11 +68,14 @@ export function ProcessingPage() {
           <div
             className={styles.progressSummary}
             role="group"
-            aria-label={`${readyPages} of ${totalPages || '?'} pages created`}
+            aria-label={`${readyPages} of ${totalPages || "?"} pages created`}
           >
             <div className={styles.progressCount}>
               {readyPages}
-              <span className={styles.progressTotal}> / {totalPages || '…'}</span>
+              <span className={styles.progressTotal}>
+                {" "}
+                / {totalPages || "…"}
+              </span>
             </div>
             <div className={styles.progressInfo}>
               <strong>Pages created</strong>
@@ -83,7 +90,7 @@ export function ProcessingPage() {
               >
                 <div
                   className={styles.progressFill}
-                  style={{ width: totalPages > 0 ? `${progress}%` : '0%' }}
+                  style={{ width: totalPages > 0 ? `${progress}%` : "0%" }}
                 />
               </div>
             </div>
@@ -98,10 +105,12 @@ export function ProcessingPage() {
           </div>
 
           <div className={styles.callout} role="status">
-            <span className={styles.calloutIcon} aria-hidden="true">i</span>
+            <span className={styles.calloutIcon} aria-hidden="true">
+              i
+            </span>
             <span>
-              <strong>No need to keep this tab open.</strong> The remaining pages
-              can finish while you do something else.
+              <strong>No need to keep this tab open.</strong> The remaining
+              pages can finish while you do something else.
             </span>
           </div>
 
@@ -112,7 +121,7 @@ export function ProcessingPage() {
             <button
               type="button"
               className={styles.secondaryBtn}
-              onClick={() => navigate({ to: '/books' })}
+              onClick={() => navigate({ to: "/books" })}
             >
               Go to my books
             </button>

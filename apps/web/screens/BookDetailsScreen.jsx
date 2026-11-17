@@ -2,7 +2,11 @@ import React from "react";
 
 const ages = Array.from({ length: 10 }, (_, index) => index + 3);
 
-export default function BookDetailsScreen({ draft, onDraftChange, onNavigate }) {
+export default function BookDetailsScreen({
+  draft,
+  onDraftChange,
+  onNavigate,
+}) {
   return (
     <div className="form-shell">
       <div className="step-head">
@@ -32,7 +36,7 @@ export default function BookDetailsScreen({ draft, onDraftChange, onNavigate }) 
             type="text"
             autoComplete="given-name"
             value={draft.childName}
-            onChange={(event) => onDraftChange({ childName: event.target.value })}
+            onChange={event => onDraftChange({ childName: event.target.value })}
           />
           <small>This appears on the cover if you want it to.</small>
         </div>
@@ -41,9 +45,15 @@ export default function BookDetailsScreen({ draft, onDraftChange, onNavigate }) 
           <select
             id="child-age"
             value={draft.age}
-            onChange={(event) => onDraftChange({ age: Number(event.target.value) })}
+            onChange={event =>
+              onDraftChange({ age: Number(event.target.value) })
+            }
           >
-            {ages.map((age) => <option key={age} value={age}>{age} years</option>)}
+            {ages.map(age => (
+              <option key={age} value={age}>
+                {age} years
+              </option>
+            ))}
           </select>
           <small>Used to set the amount of detail in each page.</small>
         </div>
@@ -55,15 +65,24 @@ export default function BookDetailsScreen({ draft, onDraftChange, onNavigate }) 
           id="book-name"
           type="text"
           value={draft.title}
-          onChange={(event) => onDraftChange({ title: event.target.value })}
+          onChange={event => onDraftChange({ title: event.target.value })}
         />
         <small>You can edit the title before ordering.</small>
       </div>
 
       <div className="form-footer">
-        <small>Next, choose 5–10 photos. You can review every page before you order.</small>
-        <button type="button" className="button primary" onClick={() => onNavigate("upload")}>
-          Choose photos <span className="arrow" aria-hidden="true">→</span>
+        <small>
+          Next, choose 5–10 photos. You can review every page before you order.
+        </small>
+        <button
+          type="button"
+          className="button primary"
+          onClick={() => onNavigate("upload")}
+        >
+          Choose photos{" "}
+          <span className="arrow" aria-hidden="true">
+            →
+          </span>
         </button>
       </div>
     </div>

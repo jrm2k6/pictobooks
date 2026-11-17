@@ -19,15 +19,20 @@ export function customerReducer(state, action) {
     case "email/resent":
       return { ...state, resends: state.resends + 1 };
     case "photos/added":
-      return { ...state, files: [...state.files, ...action.files].slice(0, action.maxUserFiles) };
+      return {
+        ...state,
+        files: [...state.files, ...action.files].slice(0, action.maxUserFiles),
+      };
     case "photo/removed":
       return {
         ...state,
         removedSamples: action.sample
           ? [...state.removedSamples, action.id]
           : state.removedSamples,
-        files: action.sample ? state.files : state.files.filter((file) => file.id !== action.id),
-        photoOrder: state.photoOrder.filter((id) => id !== action.id),
+        files: action.sample
+          ? state.files
+          : state.files.filter(file => file.id !== action.id),
+        photoOrder: state.photoOrder.filter(id => id !== action.id),
       };
     case "photos/reordered":
       return { ...state, photoOrder: action.ids };

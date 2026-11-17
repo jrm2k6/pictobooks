@@ -12,7 +12,9 @@ test.describe("unauthenticated redirects", () => {
     expect(page.url()).toContain("/sign-in");
   });
 
-  test("/books redirects to /sign-in when not authenticated", async ({ page }) => {
+  test("/books redirects to /sign-in when not authenticated", async ({
+    page,
+  }) => {
     await page.goto("/books");
     await page.waitForURL(/\/sign-in/);
     expect(page.url()).toContain("/sign-in");
@@ -21,12 +23,16 @@ test.describe("unauthenticated redirects", () => {
   test("/sign-in renders Clerk SignIn widget", async ({ page }) => {
     await page.goto("/sign-in");
     // Clerk renders a form or its card container
-    await expect(page.locator(".cl-rootBox, [data-clerk-root]").first()).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.locator(".cl-rootBox, [data-clerk-root]").first()
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test("/sign-up renders Clerk SignUp widget", async ({ page }) => {
     await page.goto("/sign-up");
-    await expect(page.locator(".cl-rootBox, [data-clerk-root]").first()).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.locator(".cl-rootBox, [data-clerk-root]").first()
+    ).toBeVisible({ timeout: 10000 });
   });
 });
 
@@ -44,10 +50,14 @@ test.describe("authenticated flows", () => {
     await setupClerkTestingToken({ page });
     await page.goto("/books");
     await expect(page).toHaveURL(/\/books/);
-    await expect(page.getByRole("heading", { name: /your books/i })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /your books/i })
+    ).toBeVisible();
   });
 
-  test("authenticated user is not redirected away from /books", async ({ page }) => {
+  test("authenticated user is not redirected away from /books", async ({
+    page,
+  }) => {
     await setupClerkTestingToken({ page });
     await page.goto("/books");
     // Should stay on /books, not bounce to /sign-in

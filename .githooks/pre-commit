@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$staged" ] && exit 0
+
+# --ignore-unknown skips files prettier has no parser for. .prettierignore
+# still applies, so generated output and sibling checkouts are left alone.
+# --list-different exits non-zero when it finds something, hence the `|| true`.
+unformatted=$(
+  printf '%s\n' "$staged" |
+    tr '\n' '\0' |
+    xargs -0 pnpm exec prettier --ignore-unknown --list-different 2>/dev/null ||
+    true
+)
+
+if [ -n "$unformatted" ]; then
+  printf 'Blocked commit: staged files are not formatted:\n' >&2
+  printf '%s\n' "$unformatted" | sed 's/^/  /' >&2
+  printf '\nRun `pnpm format`, stage the result, and commit again.\n' >&2
+  exit 1
+fi
