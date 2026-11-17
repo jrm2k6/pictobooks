@@ -3,3 +3,16 @@ node_modules
 .git
 *.min.js
 *.min.css
+
+# Sibling checkouts: `prettier --write .` would otherwise reformat another
+# worktree's files, which show up as churn in that checkout, not this one.
+.claude/worktrees
+.wrangler
+pnpm-lock.yaml
+
+# Generated run output
+playwright-report
+test-results
+artifacts
+catalog
+samples
