@@ -16,9 +16,9 @@ Digital products may include downloadable coloring pages, tracing pages, or othe
 
 Because digital products are delivered immediately and cannot be returned, **digital purchases are generally non-refundable once delivered**, except in cases where:
 
-* the file cannot be accessed
-* the file is corrupted
-* the product was not delivered
+- the file cannot be accessed
+- the file is corrupted
+- the product was not delivered
 
 If you experience issues accessing your digital purchase, please contact us and we will attempt to resolve the issue.
 
@@ -28,18 +28,18 @@ If you experience issues accessing your digital purchase, please contact us and 
 
 If Pictobook offers printed coloring books or other physical goods, refunds or replacements may be available in the following situations:
 
-* the product arrives **damaged**
-* the product is **defective**
-* the **wrong item** was delivered
-* the product **fails to arrive**
+- the product arrives **damaged**
+- the product is **defective**
+- the **wrong item** was delivered
+- the product **fails to arrive**
 
 Requests for refunds or replacements must typically be made within **14 days of delivery**.
 
 You may be asked to provide:
 
-* photos of the damaged or incorrect product
-* your order number
-* a description of the issue
+- photos of the damaged or incorrect product
+- your order number
+- a description of the issue
 
 ---
 
@@ -55,10 +55,10 @@ Because many products are generated and printed on demand, cancellations may not
 
 Shipping times are estimates and may vary depending on:
 
-* shipping carriers
-* destination
-* production time
-* external factors outside our control
+- shipping carriers
+- destination
+- production time
+- external factors outside our control
 
 Pictobook is not responsible for delays caused by shipping providers or customs processing.
 

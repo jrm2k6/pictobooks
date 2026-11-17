@@ -1,6 +1,6 @@
-import React from 'react';
-import { AppShell } from '../app-shell.jsx';
-import styles from './wizard-shell.module.css';
+import React from "react";
+import { AppShell } from "../app-shell.jsx";
+import styles from "./wizard-shell.module.css";
 
 const TOTAL_STEPS = 4;
 
@@ -22,9 +22,15 @@ export function WizardShell({ step, children }) {
 
 function StepTrack({ current, total }) {
   return (
-    <div className={styles.stepTrack} aria-label={`Step ${current} of ${total}`}>
+    <div
+      className={styles.stepTrack}
+      aria-label={`Step ${current} of ${total}`}
+    >
       <span className={styles.stepLabel}>
-        <strong>Step {current} of {total}</strong> · Create your book
+        <strong>
+          Step {current} of {total}
+        </strong>{" "}
+        · Create your book
       </span>
       <span className={styles.dots} aria-hidden="true">
         {Array.from({ length: total }, (_, i) => (

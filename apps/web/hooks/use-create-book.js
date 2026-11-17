@@ -1,5 +1,5 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useApiClient } from '../api-client.js';
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useApiClient } from "../api-client.js";
 
 /**
  * Mutation hook: create a new draft book.
@@ -14,9 +14,9 @@ export function useCreateBook() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data) => api.createBook(data),
+    mutationFn: data => api.createBook(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['books'] });
+      queryClient.invalidateQueries({ queryKey: ["books"] });
     },
   });
 }

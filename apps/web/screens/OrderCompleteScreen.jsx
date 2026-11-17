@@ -1,14 +1,27 @@
 import React from "react";
 
-export default function OrderCompleteScreen({ draft, email, format, onNavigate }) {
+export default function OrderCompleteScreen({
+  draft,
+  email,
+  format,
+  onNavigate,
+}) {
   const isPdf = format === "pdf";
 
   return (
     <div className="confirmation">
       <div className="confirmation-inner">
-        <div className="confirmation-badge" aria-hidden="true">{isPdf ? "↓" : "✓"}</div>
-        <div className="app-eyebrow">{isPdf ? "Sample PDF · prototype" : "Sample order · prototype"}</div>
-        <h1>{isPdf ? "Your coloring pages are ready to preview." : `${draft.childName || "Your child"}’s book is on its way.`}</h1>
+        <div className="confirmation-badge" aria-hidden="true">
+          {isPdf ? "↓" : "✓"}
+        </div>
+        <div className="app-eyebrow">
+          {isPdf ? "Sample PDF · prototype" : "Sample order · prototype"}
+        </div>
+        <h1>
+          {isPdf
+            ? "Your coloring pages are ready to preview."
+            : `${draft.childName || "Your child"}’s book is on its way.`}
+        </h1>
         <p>
           {isPdf
             ? `${draft.title || "Your book"} is shown as ready for ${email || "your email"}. This button opens the sample book preview; there is no real PDF download yet.`
@@ -20,12 +33,27 @@ export default function OrderCompleteScreen({ draft, email, format, onNavigate }
             className="button primary"
             type="button"
             onClick={() => onNavigate("preview", "Download PDF")}
-          >View sample PDF pages <span className="arrow" aria-hidden="true">→</span></button>
+          >
+            View sample PDF pages{" "}
+            <span className="arrow" aria-hidden="true">
+              →
+            </span>
+          </button>
         ) : (
-          <div className="tracking-line" aria-label="Illustrative print order progress">
-            <span className="check" aria-hidden="true">✓</span>
+          <div
+            className="tracking-line"
+            aria-label="Illustrative print order progress"
+          >
+            <span className="check" aria-hidden="true">
+              ✓
+            </span>
             <span>Sample order</span>
-            <span className="progress-track" aria-hidden="true"><i className="progress-fill" style={{ display: "block", width: "27%" }} /></span>
+            <span className="progress-track" aria-hidden="true">
+              <i
+                className="progress-fill"
+                style={{ display: "block", width: "27%" }}
+              />
+            </span>
             <span>Print preview</span>
           </div>
         )}
@@ -35,9 +63,14 @@ export default function OrderCompleteScreen({ draft, email, format, onNavigate }
             className="button ghost"
             type="button"
             onClick={() => onNavigate("library", "Return to My books")}
-          >Back to My books</button>
+          >
+            Back to My books
+          </button>
         </div>
-        <p className="account-privacy">This confirmation is only a prototype. It does not place an order, charge you, or send a file.</p>
+        <p className="account-privacy">
+          This confirmation is only a prototype. It does not place an order,
+          charge you, or send a file.
+        </p>
       </div>
     </div>
   );

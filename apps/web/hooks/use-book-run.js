@@ -1,9 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
-import { useApiClient, UnauthorizedError } from '../api-client.js';
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { useApiClient, UnauthorizedError } from "../api-client.js";
 
 /** Run statuses that indicate active processing — keep polling. */
-const ACTIVE_STATUSES = new Set(['created', 'running', 'partially_completed']);
+const ACTIVE_STATUSES = new Set(["created", "running", "partially_completed"]);
 
 /**
  * Query hook: get a book run's detail, with auto-polling while processing.
@@ -18,20 +18,20 @@ export function useBookRun(bookId, runId) {
   const navigate = useNavigate();
 
   return useQuery({
-    queryKey: ['book-run', bookId, runId],
+    queryKey: ["book-run", bookId, runId],
     queryFn: async () => {
       try {
         return await api.getBookRun(bookId, runId);
       } catch (err) {
         if (err instanceof UnauthorizedError) {
-          navigate({ to: '/sign-in' });
+          navigate({ to: "/sign-in" });
           return null;
         }
         throw err;
       }
     },
     enabled: Boolean(bookId && runId),
-    refetchInterval: (query) => {
+    refetchInterval: query => {
       const data = query.state.data;
       if (!data) return false;
       return ACTIVE_STATUSES.has(data.status) ? 2000 : false;

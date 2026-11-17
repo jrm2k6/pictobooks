@@ -1,5 +1,5 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useApiClient } from '../api-client.js';
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useApiClient } from "../api-client.js";
 
 /**
  * Mutation hook: create a book run and get upload intents for each photo.
@@ -19,9 +19,9 @@ export function useCreateBookRun() {
 
   return useMutation({
     mutationFn: ({ bookId, photos }) => api.createBookRun(bookId, { photos }),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['books'] });
-      queryClient.invalidateQueries({ queryKey: ['book-runs', data.bookId] });
+    onSuccess: data => {
+      queryClient.invalidateQueries({ queryKey: ["books"] });
+      queryClient.invalidateQueries({ queryKey: ["book-runs", data.bookId] });
     },
   });
 }

@@ -12,7 +12,6 @@ import PrivacyPolicy from "./pages/legal/PrivacyPolicy";
 import Refunds from "./pages/legal/Refunds";
 import TermsOfService from "./pages/legal/TermsOfService";
 
-
 function Router() {
   return (
     <Switch>

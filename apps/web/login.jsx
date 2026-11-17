@@ -6,23 +6,38 @@ function LoginApp() {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
 
-  const submit = (event) => {
+  const submit = event => {
     event.preventDefault();
-    setMessage("Sign-in is not connected yet. We’re getting your Pictobook account ready.");
+    setMessage(
+      "Sign-in is not connected yet. We’re getting your Pictobook account ready."
+    );
   };
 
   return (
     <main className="login-page">
       <section className="login-story" aria-labelledby="story-title">
-        <a className="login-brand" href="https://pictobook.app/" aria-label="Pictobook home">
-          <span className="login-brand-mark" aria-hidden="true">p</span>
+        <a
+          className="login-brand"
+          href="https://pictobook.app/"
+          aria-label="Pictobook home"
+        >
+          <span className="login-brand-mark" aria-hidden="true">
+            p
+          </span>
           <span>pictobook</span>
         </a>
 
         <div className="story-copy">
-          <span className="login-eyebrow"><span aria-hidden="true">✳</span> A little more magic at home</span>
-          <h1 id="story-title">Their favorite moments, made <em>colorful.</em></h1>
-          <p>Turn the photos you love into a coloring book made just for your child.</p>
+          <span className="login-eyebrow">
+            <span aria-hidden="true">✳</span> A little more magic at home
+          </span>
+          <h1 id="story-title">
+            Their favorite moments, made <em>colorful.</em>
+          </h1>
+          <p>
+            Turn the photos you love into a coloring book made just for your
+            child.
+          </p>
         </div>
 
         <div className="book-illustration" aria-hidden="true">
@@ -50,21 +65,34 @@ function LoginApp() {
               <span className="page-caption">made just for you</span>
             </div>
           </div>
-          <span className="floating-star star-one" aria-hidden="true">✳</span>
-          <span className="floating-star star-two" aria-hidden="true">✦</span>
+          <span className="floating-star star-one" aria-hidden="true">
+            ✳
+          </span>
+          <span className="floating-star star-two" aria-hidden="true">
+            ✦
+          </span>
           <span className="floating-dot dot-one" aria-hidden="true" />
           <span className="floating-dot dot-two" aria-hidden="true" />
         </div>
 
-        <div className="story-footnote"><span className="footnote-check" aria-hidden="true">✓</span> A keepsake made from your family’s own stories</div>
+        <div className="story-footnote">
+          <span className="footnote-check" aria-hidden="true">
+            ✓
+          </span>{" "}
+          A keepsake made from your family’s own stories
+        </div>
       </section>
 
       <section className="login-panel" aria-labelledby="login-title">
         <div className="login-form-wrap">
-          <div className="mobile-brand" aria-hidden="true"><span className="login-brand-mark">p</span> pictobook</div>
+          <div className="mobile-brand" aria-hidden="true">
+            <span className="login-brand-mark">p</span> pictobook
+          </div>
           <span className="form-kicker">Welcome back</span>
           <h2 id="login-title">Your books are waiting.</h2>
-          <p className="form-intro">Sign in to pick up where your family left off.</p>
+          <p className="form-intro">
+            Sign in to pick up where your family left off.
+          </p>
 
           <form className="login-form" onSubmit={submit}>
             <label htmlFor="login-email">Email address</label>
@@ -77,22 +105,39 @@ function LoginApp() {
               placeholder="you@example.com"
               required
               value={email}
-              onChange={(event) => {
+              onChange={event => {
                 setEmail(event.currentTarget.value);
                 setMessage("");
               }}
             />
-            <button className="login-submit" type="submit">Continue with email <span aria-hidden="true">→</span></button>
-            <p className="login-hint">No password to remember. We’ll use a secure sign-in link.</p>
-            <p className="login-message" role="status" aria-live="polite">{message}</p>
+            <button className="login-submit" type="submit">
+              Continue with email <span aria-hidden="true">→</span>
+            </button>
+            <p className="login-hint">
+              No password to remember. We’ll use a secure sign-in link.
+            </p>
+            <p className="login-message" role="status" aria-live="polite">
+              {message}
+            </p>
           </form>
 
-          <div className="login-divider"><span>made for the moments that matter</span></div>
-          <p className="login-legal">By continuing, you agree to our <a href="https://pictobook.app/legal/terms-of-service">Terms</a> and <a href="https://pictobook.app/legal/privacy-policy">Privacy Policy</a>.</p>
+          <div className="login-divider">
+            <span>made for the moments that matter</span>
+          </div>
+          <p className="login-legal">
+            By continuing, you agree to our{" "}
+            <a href="https://pictobook.app/legal/terms-of-service">Terms</a> and{" "}
+            <a href="https://pictobook.app/legal/privacy-policy">
+              Privacy Policy
+            </a>
+            .
+          </p>
         </div>
         <footer className="login-footer">
           <span>© {new Date().getFullYear()} Pictobook</span>
-          {import.meta.env.DEV && <a href="/storybook">Open local prototype ↗</a>}
+          {import.meta.env.DEV && (
+            <a href="/storybook">Open local prototype ↗</a>
+          )}
         </footer>
       </section>
     </main>

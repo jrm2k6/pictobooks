@@ -27,7 +27,9 @@ import { createRoot } from "react-dom/client";
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 if (!PUBLISHABLE_KEY) {
-  throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY. Copy .env.example to .env and add your key.");
+  throw new Error(
+    "Missing VITE_CLERK_PUBLISHABLE_KEY. Copy .env.example to .env and add your key."
+  );
 }
 
 function AuthedLayout() {
@@ -36,7 +38,6 @@ function AuthedLayout() {
   if (!isSignedIn) return <RedirectToSignIn />;
   return <Outlet />;
 }
-
 
 const rootRoute = createRootRoute();
 
