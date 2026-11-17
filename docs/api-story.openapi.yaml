@@ -1,0 +1,544 @@
+openapi: 3.1.1
+info:
+  title: Pictobook — Book Creation Story
+  version: 1.0.0
+  summary: Focused walkthrough of the five API calls needed to create and launch a book generation run.
+  description: |
+    ## The creation sequence
+
+    Call these five operations in order. The IDs returned by each step are
+    carried into the next.
+
+    ```
+    1. POST /v1/books                              → bookId
+    2. POST /v1/books/{bookId}/runs                → runId, uploads[]
+    3. PUT  <each upload.uploadUrl>                → photo stored
+    4. POST /v1/books/{bookId}/runs/{runId}/start  → run is queued
+    5. GET  /v1/books/{bookId}/runs/{runId}        → poll for pages
+    ```
+
+    All mutating operations require an `Idempotency-Key` header containing a
+    unique string you generate (e.g. a UUID). Re-sending the same key returns
+    the original response instead of creating a duplicate resource.
+
+    **Local development**: the upload URL returned in step 2 is a relative
+    path (`/v1/books/…/upload-intents/…/content`) served by the same Worker.
+    Pass your Clerk JWT in the `Authorization` header when uploading locally.
+
+    **Production**: the upload URL is a presigned R2 URL. Use the
+    `requiredHeaders` map from the upload intent; do *not* add an
+    `Authorization` header.
+
+servers:
+  - url: http://127.0.0.1:8787
+    description: Local Worker (wrangler dev)
+  - url: https://api.pictobook.app
+    description: Production
+
+security:
+  - clerkBearer: []
+
+tags:
+  - name: "1 · Create book"
+    description: >-
+      Start a new draft book. Title and child name are optional — you can set
+      them now or update them later with PATCH /v1/books/{bookId}.
+  - name: "2 · Create run"
+    description: >-
+      Declare the photos you will upload. Each photo is described by its
+      content type, byte size, and SHA-256 hash. The API returns one upload
+      intent per photo containing a URL and expiry time.
+  - name: "3 · Upload photos"
+    description: >-
+      PUT each photo's bytes to its upload URL. For local dev the URL is
+      a path on the Worker; include your Clerk JWT as a Bearer token.
+      For production the URL is presigned; use only the headers in
+      `requiredHeaders` and no Authorization header.
+  - name: "4 · Start run"
+    description: >-
+      Signal that all uploads are complete and the pipeline should start.
+      The Worker verifies every upload intent, registers the artifacts, and
+      enqueues the generation workflow.
+  - name: "5 · Poll status"
+    description: >-
+      Fetch the current state of the run. Poll until `status` becomes
+      `completed`, `failed`, or `cancelled`. The `pages` array shows the
+      state of each individual page.
+
+paths:
+  /v1/books:
+    post:
+      operationId: createBook
+      summary: Create a draft book
+      tags: ["1 · Create book"]
+      description: |
+        Creates a new book owned by the authenticated user.
+        Returns a `bookId` you will use in every subsequent call.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookDraftInput"
+            example:
+              title: "Lily's Summer Adventure"
+              childName: "Lily"
+      responses:
+        "201":
+          description: Book created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bookId, status]
+                properties:
+                  bookId:
+                    type: string
+                    example: "book-a3f9c2d1e5b847"
+                  status:
+                    type: string
+                    enum: [draft]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/books/{bookId}/runs:
+    post:
+      operationId: createBookRun
+      summary: Declare photos and get upload URLs
+      tags: ["2 · Create run"]
+      description: |
+        Declares the photos you plan to upload. Supply each photo's
+        content type, exact byte size, and lowercase hex SHA-256 digest.
+
+        The response contains one **upload intent** per photo. Each intent
+        has an `uploadUrl`, optional `requiredHeaders`, and an `expiresAt`
+        timestamp. If the URL expires before you finish uploading, call the
+        refresh endpoint.
+      parameters:
+        - $ref: "#/components/parameters/BookId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRunInput"
+            example:
+              photos:
+                - contentType: "image/jpeg"
+                  byteSize: 234567
+                  sha256: "a3f9c2d1e5b847a3f9c2d1e5b847a3f9c2d1e5b847a3f9c2d1e5b847a3f9c2d1"
+                - contentType: "image/jpeg"
+                  byteSize: 189034
+                  sha256: "b7e4a1c8d2f603b7e4a1c8d2f603b7e4a1c8d2f603b7e4a1c8d2f603b7e4a1c8"
+                - contentType: "image/png"
+                  byteSize: 445890
+                  sha256: "c8f5b2d9e3a714c8f5b2d9e3a714c8f5b2d9e3a714c8f5b2d9e3a714c8f5b2d9"
+                - contentType: "image/jpeg"
+                  byteSize: 302145
+                  sha256: "d9a6c3e0f4b825d9a6c3e0f4b825d9a6c3e0f4b825d9a6c3e0f4b825d9a6c3e0"
+                - contentType: "image/webp"
+                  byteSize: 156789
+                  sha256: "e0b7d4f1a5c936e0b7d4f1a5c936e0b7d4f1a5c936e0b7d4f1a5c936e0b7d4f1"
+      responses:
+        "201":
+          description: Run created with upload intents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateRunResponse"
+              example:
+                bookId: "book-a3f9c2d1e5b847"
+                runId: "run-7d2e9c4f1a3b56"
+                uploads:
+                  - uploadIntentId: "upload-1-7d2e9c4f1a3b56"
+                    photoId: "photo-1-7d2e9c4f1a3b56"
+                    artifactId: "source:photo-1-7d2e9c4f1a3b56"
+                    uploadUrl: "/v1/books/book-a3f9c2d1e5b847/runs/run-7d2e9c4f1a3b56/upload-intents/upload-1-7d2e9c4f1a3b56/content"
+                    expiresAt: "2026-11-15T13:00:00.000Z"
+                    requiredHeaders:
+                      Content-Type: "image/jpeg"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+
+  /v1/books/{bookId}/runs/{runId}/upload-intents/{uploadIntentId}/content:
+    put:
+      operationId: uploadPhotoContent
+      summary: Upload a photo's bytes
+      tags: ["3 · Upload photos"]
+      description: |
+        PUT the raw photo bytes to this URL. The `Content-Type` must
+        exactly match what you declared in step 2.
+
+        **Local dev**: this path is served by the Worker. Add your Clerk
+        JWT as `Authorization: Bearer <token>`.
+
+        **Production**: use the presigned URL from `uploadUrl` directly.
+        Apply only the headers from `requiredHeaders`. Do *not* add an
+        Authorization header — it will cause the presigned request to fail.
+
+        The body is validated against the declared byte size and SHA-256.
+        A mismatch returns 400.
+      parameters:
+        - $ref: "#/components/parameters/BookId"
+        - $ref: "#/components/parameters/RunId"
+        - in: path
+          name: uploadIntentId
+          required: true
+          schema: { type: string }
+          example: "upload-1-7d2e9c4f1a3b56"
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema: { type: string, format: binary }
+          image/png:
+            schema: { type: string, format: binary }
+          image/webp:
+            schema: { type: string, format: binary }
+      responses:
+        "201":
+          description: Photo stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uploadIntentId: { type: string }
+                  status: { type: string, enum: [uploaded] }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "410":
+          description: Upload intent has expired — call the refresh endpoint
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+      - $ref: "#/components/parameters/RunId"
+
+  /v1/books/{bookId}/runs/{runId}/start:
+    post:
+      operationId: startBookRun
+      summary: Start the generation pipeline
+      tags: ["4 · Start run"]
+      description: |
+        Verifies that every upload intent has a matching object in storage,
+        registers each photo as an artifact, then enqueues the generation
+        workflow. Returns `202 Accepted` immediately; the pipeline runs
+        asynchronously.
+
+        Returns `409 upload_missing` if any photo has not been uploaded yet.
+      parameters:
+        - $ref: "#/components/parameters/BookId"
+        - $ref: "#/components/parameters/RunId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+            example: {}
+      responses:
+        "202":
+          description: Run queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bookId: { type: string }
+                  runId: { type: string }
+                  status: { type: string, enum: [started] }
+              example:
+                bookId: "book-a3f9c2d1e5b847"
+                runId: "run-7d2e9c4f1a3b56"
+                status: "started"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >-
+            Conflict — upload_missing (a photo was not uploaded) or
+            run_has_no_uploads (no photos were declared)
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+      - $ref: "#/components/parameters/RunId"
+
+  /v1/books/{bookId}/runs/{runId}:
+    get:
+      operationId: getBookRun
+      summary: Poll run status
+      tags: ["5 · Poll status"]
+      description: |
+        Returns the current state of the run and all its pages.
+        Poll until `status` reaches a terminal state.
+
+        | `status`    | Meaning                                       |
+        |-------------|-----------------------------------------------|
+        | `created`   | Run declared, not yet started                 |
+        | `started`   | Pipeline is processing pages                  |
+        | `completed` | All pages reached a terminal page state       |
+        | `failed`    | Pipeline encountered an unrecoverable error   |
+
+        Page states: `created` → `processing` → `approved` (or `needs_human_review` / `rejected`).
+      parameters:
+        - $ref: "#/components/parameters/BookId"
+        - $ref: "#/components/parameters/RunId"
+      responses:
+        "200":
+          description: Run status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookRunStatus"
+              example:
+                runId: "run-7d2e9c4f1a3b56"
+                bookId: "book-a3f9c2d1e5b847"
+                status: "started"
+                stylePackVersion: "pictobook-preschool-v0.1"
+                createdAt: "2026-11-15T12:00:00.000Z"
+                completedAt: null
+                readyPageCount: 2
+                totalPageCount: 5
+                pages:
+                  - pageId: "page-1-7d2e9c4f1a3b56"
+                    photoId: "photo-1-7d2e9c4f1a3b56"
+                    state: "approved"
+                    approvedCandidateId: "cand-abc"
+                    candidates: []
+                  - pageId: "page-2-7d2e9c4f1a3b56"
+                    photoId: "photo-2-7d2e9c4f1a3b56"
+                    state: "processing"
+                    approvedCandidateId: null
+                    candidates: []
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+      - $ref: "#/components/parameters/RunId"
+
+components:
+  securitySchemes:
+    clerkBearer:
+      type: http
+      scheme: bearer
+      description: >-
+        Clerk session JWT. In the app: `await Clerk.session.getToken()`.
+        In tests: use `@clerk/testing` to obtain a short-lived token.
+
+  parameters:
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 200
+        pattern: "^[A-Za-z0-9._:-]{8,200}$"
+      example: "story-book-20261115-a3f9"
+      description: >-
+        Unique string you generate (e.g. `crypto.randomUUID()`). Re-sending
+        the same key returns the original response without side-effects.
+    BookId:
+      in: path
+      name: bookId
+      required: true
+      schema: { type: string }
+      example: "book-a3f9c2d1e5b847"
+    RunId:
+      in: path
+      name: runId
+      required: true
+      schema: { type: string }
+      example: "run-7d2e9c4f1a3b56"
+
+  schemas:
+    BookDraftInput:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 120
+          example: "Lily's Summer Adventure"
+        childName:
+          type: string
+          maxLength: 80
+          example: "Lily"
+        childAge:
+          type: integer
+          minimum: 3
+          maximum: 12
+          example: 4
+
+    PhotoInput:
+      type: object
+      required: [contentType, byteSize, sha256]
+      properties:
+        contentType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+        byteSize:
+          type: integer
+          minimum: 1
+          maximum: 26214400
+          description: Exact byte count of the file
+        sha256:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+          description: Lowercase hex SHA-256 of the file bytes
+
+    CreateRunInput:
+      type: object
+      required: [photos]
+      properties:
+        photos:
+          type: array
+          minItems: 1
+          maxItems: 24
+          description: >-
+            The effective range is environment-specific and is advertised by
+            GET /v1/pipeline-config as minPhotosPerRun/maxPhotosPerRun
+            (deployed default 5 to 10). 24 is the hard ceiling the API
+            enforces regardless of configuration.
+          items:
+            $ref: "#/components/schemas/PhotoInput"
+        stylePackVersion:
+          type: string
+          default: "pictobook-preschool-v0.1"
+          description: Style pack to use; defaults to the current preschool pack
+        costCeilingMicros:
+          type: integer
+          description: >-
+            Optional cap on generation spend in microdollars. Defaults to
+            photos.length × maximumCostPerPage from /v1/pipeline-config.
+
+    UploadIntent:
+      type: object
+      required:
+        [
+          uploadIntentId,
+          photoId,
+          artifactId,
+          uploadUrl,
+          expiresAt,
+          requiredHeaders,
+        ]
+      properties:
+        uploadIntentId: { type: string }
+        photoId: { type: string }
+        artifactId: { type: string }
+        uploadUrl:
+          type: string
+          description: >-
+            PUT target. Relative path for local dev, absolute presigned URL
+            for production.
+        expiresAt:
+          type: string
+          format: date-time
+        requiredHeaders:
+          type: object
+          additionalProperties: { type: string }
+          description: Headers to include in the PUT request
+
+    CreateRunResponse:
+      type: object
+      required: [bookId, runId, uploads]
+      properties:
+        bookId: { type: string }
+        runId: { type: string }
+        uploads:
+          type: array
+          items:
+            $ref: "#/components/schemas/UploadIntent"
+
+    PageStatus:
+      type: object
+      required: [pageId, photoId, state]
+      properties:
+        pageId: { type: string }
+        photoId: { type: string }
+        state:
+          type: string
+          enum:
+            [
+              created,
+              processing,
+              approved,
+              needs_human_review,
+              rejected,
+              failed,
+            ]
+        approvedCandidateId: { type: string, nullable: true }
+        candidates:
+          type: array
+          items:
+            type: object
+            properties:
+              candidateId: { type: string }
+              generationKind: { type: string }
+              artifactId: { type: string, nullable: true }
+
+    BookRunStatus:
+      type: object
+      required: [runId, bookId, status, readyPageCount, totalPageCount, pages]
+      properties:
+        runId: { type: string }
+        bookId: { type: string }
+        status:
+          type: string
+          enum: [created, started, completed, failed, cancelled]
+        stylePackVersion: { type: string }
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time, nullable: true }
+        readyPageCount: { type: integer }
+        totalPageCount: { type: integer }
+        pages:
+          type: array
+          items:
+            $ref: "#/components/schemas/PageStatus"
+
+  responses:
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              code: { type: string }
+              status: { type: integer, example: 400 }
+    Unauthorized:
+      description: Missing or invalid JWT
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              code: { type: string, example: authentication_required }
+              status: { type: integer, example: 401 }
+    NotFound:
+      description: Resource not found or not owned by the caller
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              code: { type: string }
+              status: { type: integer, example: 404 }
