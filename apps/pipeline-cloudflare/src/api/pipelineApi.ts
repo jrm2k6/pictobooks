@@ -23,6 +23,10 @@ const SCHEMA_VERSION = "2026-11-10";
 const UPLOAD_EXPIRY_SECONDS = 15 * 60;
 const DOWNLOAD_EXPIRY_SECONDS = 5 * 60;
 const MAX_PHOTOS = 24;
+export const MIN_PHOTOS = 5;
+// Per-run page count is a product/pricing rule, not a safety limit; MAX_PHOTOS
+// is the hard ceiling that validatePhotos enforces regardless of configuration.
+export const MAX_PHOTOS_PER_RUN = 10;
 
 export type ApiResponse = { status: number; body: Record<string, unknown> };
 
@@ -87,7 +91,9 @@ export class PipelineApi {
       initialCandidateCount: DEFAULT_INITIAL_CANDIDATE_COUNT,
       apiKeyConfigured: false,
     },
-    private readonly localCustomerApi = false
+    private readonly localCustomerApi = false,
+    private readonly minPhotosPerRun = MIN_PHOTOS,
+    private readonly maxPhotosPerRun = MAX_PHOTOS_PER_RUN
   ) {
     this.artifacts = new R2ArtifactStore(bucket, database);
   }
@@ -107,6 +113,8 @@ export class PipelineApi {
         maxRepairRounds: MAX_REPAIR_ROUNDS,
         maxCandidatesPerPage,
         maxCostPerPageMicros: this.maximumCostPerPageMicros(),
+        minPhotosPerRun: this.minPhotosPerRun,
+        maxPhotosPerRun: this.maxPhotosPerRun,
       },
     };
   }
@@ -258,7 +266,9 @@ export class PipelineApi {
         bookId,
         runId,
         photoIds,
-        this.isoNow()
+        this.isoNow(),
+        this.minPhotosPerRun,
+        this.maxPhotosPerRun
       ),
     }));
   }
@@ -350,7 +360,8 @@ export class PipelineApi {
         validatePhotos(input.photos);
         if (
           this.localCustomerApi &&
-          (input.photos.length < 5 || input.photos.length > 10)
+          (input.photos.length < this.minPhotosPerRun ||
+            input.photos.length > this.maxPhotosPerRun)
         ) {
           throw new ApiProblem(400, "invalid_photo_count");
         }

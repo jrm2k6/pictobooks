@@ -1,4 +1,4 @@
-import { ApiProblem } from "./pipelineApi.js";
+import { ApiProblem, MAX_PHOTOS_PER_RUN, MIN_PHOTOS } from "./pipelineApi.js";
 
 /**
  * Persists the customer's chosen source-photo order before generation starts.
@@ -11,7 +11,9 @@ export const updatePhotoOrder = async (
   bookId: string,
   runId: string,
   orderedPhotoIds: string[],
-  now: string
+  now: string,
+  minPhotos = MIN_PHOTOS,
+  maxPhotos = MAX_PHOTOS_PER_RUN
 ): Promise<{ runId: string; photoIds: string[] }> => {
   const run = await database
     .prepare(
@@ -33,8 +35,8 @@ export const updatePhotoOrder = async (
   const existing = result.results.map(row => row.photo_id);
   const requested = new Set(orderedPhotoIds);
   if (
-    orderedPhotoIds.length < 5 ||
-    orderedPhotoIds.length > 10 ||
+    orderedPhotoIds.length < minPhotos ||
+    orderedPhotoIds.length > maxPhotos ||
     orderedPhotoIds.length !== existing.length ||
     requested.size !== orderedPhotoIds.length ||
     existing.some(photoId => !requested.has(photoId))

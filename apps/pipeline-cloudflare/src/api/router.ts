@@ -1,6 +1,8 @@
 import { AuthenticationError, JwtAuthenticator } from "./auth.js";
 import {
   ApiProblem,
+  MAX_PHOTOS_PER_RUN,
+  MIN_PHOTOS,
   PipelineApi,
   type ApiResponse,
   type BookRunLauncher,
@@ -94,7 +96,9 @@ export const handleApiRequest = async (
           DEFAULT_INITIAL_CANDIDATE_COUNT,
         apiKeyConfigured: Boolean(env.GEMINI_API_KEY),
       },
-      localCustomerApi
+      localCustomerApi,
+      parsePositiveInteger(env.MIN_PHOTOS_PER_RUN) ?? MIN_PHOTOS,
+      parsePositiveInteger(env.MAX_PHOTOS_PER_RUN) ?? MAX_PHOTOS_PER_RUN
     );
     const response = await route(request, url, principal, api);
     if (response instanceof Response) return addCors(response, cors);
@@ -448,6 +452,8 @@ type RuntimeSecrets = {
   GEMINI_STYLE_JUDGE_COST_MICROS?: string;
   PIPELINE_INITIAL_CANDIDATE_COUNT?: string;
   LOCAL_CUSTOMER_API?: string;
+  MIN_PHOTOS_PER_RUN?: string;
+  MAX_PHOTOS_PER_RUN?: string;
 };
 
 export type RuntimeEnv = Env & RuntimeSecrets;

@@ -17,8 +17,11 @@ build/
 !**/.env.example
 !.env.*.example
 !**/.env.*.example
-apps/functions/.dev.vars
-apps/functions/.wrangler/
+# Wrangler local secrets and state, in any workspace package
+**/.dev.vars
+**/.dev.vars.*
+!**/.dev.vars.example
+**/.wrangler/
 
 # IDE and editor files
 .vscode/
@@ -121,8 +124,13 @@ temp/
 # Manus AI tool artifacts
 .manus-logs/
 
-# Claude Code local settings
+# Claude Code local settings and worktree checkouts (.claude/skills stays tracked)
 .claude/settings.local.json
+.claude/worktrees/
 
 # Generated test/smoke run output
 /artifacts/
+
+# Playwright run output
+playwright-report/
+test-results/
