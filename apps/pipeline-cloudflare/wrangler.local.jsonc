@@ -7,6 +7,8 @@
   "vars": {
     "PIPELINE_INITIAL_CANDIDATE_COUNT": "2",
     "LOCAL_CUSTOMER_API": "true",
+    "MIN_PHOTOS_PER_RUN": "1",
+    "MAX_PHOTOS_PER_RUN": "24",
     "IMAGE_PROVIDER": "mock",
   },
   "d1_databases": [

@@ -1,0 +1,1330 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pictobook · API Story</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap"
+    />
+    <style>
+      :root {
+        --bg: #eef2f7;
+        --surface: #ffffff;
+        --border: #cdd8e3;
+        --text: #1a2a38;
+        --muted: #5a788e;
+        --code-bg: #f0f4f8;
+        --code-fg: #1a4060;
+        --accent: #0070b8;
+        --accent-fg: #ffffff;
+        --done: #0d7a52;
+        --done-bg: #ecf7f2;
+        --done-border: #9fd4ba;
+        --err: #c43030;
+        --err-bg: #fdf0ef;
+        --err-border: #f0b8b4;
+        --pending-num: #a0b8cc;
+        --step-line: #dde8f0;
+        --tag-bg: #ddedf8;
+        --tag-fg: #0060a0;
+        --input-bg: #ffffff;
+        --input-border: #cdd8e3;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          color-scheme: dark;
+          --bg: #0c1a26;
+          --surface: #142030;
+          --border: #243a4e;
+          --text: #c0d8e8;
+          --muted: #6090ac;
+          --code-bg: #0a1520;
+          --code-fg: #80b8d8;
+          --accent: #2090d8;
+          --accent-fg: #fff;
+          --done: #20c880;
+          --done-bg: #0c2a1c;
+          --done-border: #1a5c3a;
+          --err: #e05050;
+          --err-bg: #2a0c0c;
+          --err-border: #5c1c1c;
+          --pending-num: #3a5870;
+          --step-line: #1a3048;
+          --tag-bg: #0c2a40;
+          --tag-fg: #40a0d8;
+          --input-bg: #0e1e2e;
+          --input-border: #243a4e;
+        }
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --bg: #0c1a26;
+        --surface: #142030;
+        --border: #243a4e;
+        --text: #c0d8e8;
+        --muted: #6090ac;
+        --code-bg: #0a1520;
+        --code-fg: #80b8d8;
+        --accent: #2090d8;
+        --accent-fg: #fff;
+        --done: #20c880;
+        --done-bg: #0c2a1c;
+        --done-border: #1a5c3a;
+        --err: #e05050;
+        --err-bg: #2a0c0c;
+        --err-border: #5c1c1c;
+        --pending-num: #3a5870;
+        --step-line: #1a3048;
+        --tag-bg: #0c2a40;
+        --tag-fg: #40a0d8;
+        --input-bg: #0e1e2e;
+        --input-border: #243a4e;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Inter", system-ui, sans-serif;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      /* Header */
+      .page-header {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 20px 24px;
+        display: flex;
+        align-items: baseline;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+      .page-header h1 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .page-header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .page-header a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .page-header a:hover {
+        text-decoration: underline;
+      }
+
+      /* Config bar */
+      .config-bar {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 10px 24px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: flex-end;
+      }
+      .cfg-field {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .cfg-field label {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--muted);
+      }
+      .cfg-field input {
+        background: var(--input-bg);
+        border: 1px solid var(--input-border);
+        border-radius: 6px;
+        padding: 6px 9px;
+        font-size: 12px;
+        color: var(--text);
+        font-family: "JetBrains Mono", monospace;
+        min-width: 200px;
+      }
+      .cfg-field input:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: -1px;
+      }
+      #auth-hint {
+        font-size: 11px;
+        color: var(--muted);
+        align-self: flex-end;
+        padding-bottom: 1px;
+      }
+
+      /* Buttons */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 6px 13px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 500;
+        font-family: inherit;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: opacity 0.15s;
+        white-space: nowrap;
+      }
+      .btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: var(--accent-fg);
+        border-color: var(--accent);
+      }
+      .btn-primary:hover:not(:disabled) {
+        opacity: 0.85;
+      }
+      .btn-secondary {
+        background: transparent;
+        color: var(--muted);
+        border-color: var(--border);
+      }
+      .btn-secondary:hover:not(:disabled) {
+        background: var(--code-bg);
+      }
+
+      /* Steps */
+      .steps {
+        max-width: 800px;
+        margin: 28px auto;
+        padding: 0 20px;
+        display: flex;
+        flex-direction: column;
+      }
+      .step {
+        position: relative;
+        display: grid;
+        grid-template-columns: 32px 1fr;
+        gap: 0 14px;
+        padding-bottom: 20px;
+      }
+      .step:last-child {
+        padding-bottom: 0;
+      }
+      .step:not(:last-child)::before {
+        content: "";
+        position: absolute;
+        left: 15px;
+        top: 32px;
+        bottom: 0;
+        width: 2px;
+        background: var(--step-line);
+        z-index: 0;
+      }
+      .step.done:not(:last-child)::before {
+        background: var(--done);
+        opacity: 0.35;
+      }
+
+      .step-num {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 600;
+        background: var(--surface);
+        border: 2px solid var(--pending-num);
+        color: var(--pending-num);
+        position: relative;
+        z-index: 1;
+        flex-shrink: 0;
+        transition: all 0.2s;
+      }
+      .step.active .step-num {
+        border-color: var(--accent);
+        color: var(--accent-fg);
+        background: var(--accent);
+      }
+      .step.done .step-num {
+        border-color: var(--done);
+        background: var(--done);
+        color: #fff;
+      }
+      .step.error .step-num {
+        border-color: var(--err);
+        background: var(--err);
+        color: #fff;
+      }
+
+      .step-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        transition: border-color 0.2s;
+      }
+      .step.active .step-card {
+        border-color: var(--accent);
+      }
+      .step.done .step-card {
+        border-color: var(--done-border);
+      }
+      .step.error .step-card {
+        border-color: var(--err-border);
+      }
+
+      .step-head {
+        padding: 11px 14px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        cursor: pointer;
+        user-select: none;
+      }
+      .step-head:hover {
+        background: var(--code-bg);
+      }
+      .step-title {
+        font-weight: 600;
+        font-size: 14px;
+        flex: 1;
+      }
+      .step-method {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: var(--tag-bg);
+        color: var(--tag-fg);
+      }
+      .badge {
+        font-size: 11px;
+        font-weight: 500;
+        padding: 2px 8px;
+        border-radius: 20px;
+      }
+      .badge-done {
+        background: var(--done-bg);
+        color: var(--done);
+        border: 1px solid var(--done-border);
+      }
+      .badge-err {
+        background: var(--err-bg);
+        color: var(--err);
+        border: 1px solid var(--err-border);
+      }
+      .chevron {
+        color: var(--muted);
+        font-size: 15px;
+        transition: transform 0.2s;
+      }
+      .chevron.open {
+        transform: rotate(180deg);
+      }
+
+      .step-body {
+        border-top: 1px solid var(--border);
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      /* Fields */
+      .field-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        flex: 1;
+        min-width: 150px;
+      }
+      .field label {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--muted);
+      }
+      .field input {
+        background: var(--input-bg);
+        border: 1px solid var(--input-border);
+        border-radius: 6px;
+        padding: 7px 9px;
+        font-size: 13px;
+        color: var(--text);
+        font-family: inherit;
+      }
+      .field input:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: -1px;
+      }
+      .field-ro input {
+        background: var(--code-bg);
+        font-family: "JetBrains Mono", monospace;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      /* Photo picker */
+      .photo-zone {
+        border: 2px dashed var(--border);
+        border-radius: 8px;
+        padding: 16px;
+        text-align: center;
+        cursor: pointer;
+        transition: border-color 0.15s;
+      }
+      .photo-zone:hover {
+        border-color: var(--accent);
+      }
+      .photo-zone input[type="file"] {
+        display: none;
+      }
+      .photo-zone-label {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .photo-zone-label strong {
+        color: var(--accent);
+      }
+
+      .photo-list {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .photo-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 10px;
+        background: var(--code-bg);
+        border-radius: 6px;
+        font-size: 12px;
+      }
+      .pi-name {
+        flex: 1;
+        min-width: 0;
+        font-family: "JetBrains Mono", monospace;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .pi-size {
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .pi-hash {
+        color: var(--muted);
+        font-family: "JetBrains Mono", monospace;
+        font-size: 10px;
+      }
+      .pi-st {
+        width: 18px;
+        text-align: center;
+        flex-shrink: 0;
+      }
+
+      /* Actions */
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .hint {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      /* Progress bar */
+      .prog-bar {
+        height: 4px;
+        background: var(--border);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .prog-fill {
+        height: 100%;
+        background: var(--accent);
+        border-radius: 2px;
+        transition: width 0.3s;
+      }
+
+      /* Response */
+      .resp {
+        border-radius: 7px;
+        overflow: hidden;
+      }
+      .resp.ok {
+        border: 1px solid var(--done-border);
+      }
+      .resp.err {
+        border: 1px solid var(--err-border);
+      }
+      .resp-head {
+        padding: 6px 11px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .resp.ok .resp-head {
+        background: var(--done-bg);
+        color: var(--done);
+      }
+      .resp.err .resp-head {
+        background: var(--err-bg);
+        color: var(--err);
+      }
+      .resp-body {
+        background: var(--code-bg);
+        padding: 9px 11px;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 11px;
+        color: var(--code-fg);
+        overflow-x: auto;
+        white-space: pre;
+        max-height: 280px;
+        overflow-y: auto;
+      }
+
+      /* Poll status */
+      .poll-stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        padding: 12px 14px;
+        background: var(--code-bg);
+        border-radius: 7px;
+      }
+      .ps {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      .ps-label {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .ps-val {
+        font-size: 20px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      .ps-val.processing {
+        color: var(--accent);
+      }
+      .ps-val.completed {
+        color: var(--done);
+      }
+      .ps-val.failed {
+        color: var(--err);
+      }
+      .ps-val.created,
+      .ps-val.started {
+        color: var(--accent);
+      }
+
+      .pages-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        gap: 5px;
+        margin-top: 8px;
+      }
+      .page-chip {
+        padding: 6px 8px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+      }
+      .pc-id {
+        font-size: 10px;
+        font-family: "JetBrains Mono", monospace;
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        display: block;
+      }
+      .pc-state {
+        font-size: 11px;
+        font-weight: 600;
+        margin-top: 2px;
+      }
+      .page-chip.approved .pc-state {
+        color: var(--done);
+      }
+      .page-chip.processing .pc-state,
+      .page-chip.created .pc-state {
+        color: var(--accent);
+      }
+      .page-chip.failed .pc-state,
+      .page-chip.rejected .pc-state {
+        color: var(--err);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-header">
+      <h1>Book Generation Walkthrough</h1>
+      <p>Five API calls, auto-chained. Each step fills in the next.</p>
+      <nav style="display: flex; gap: 12px; margin-left: auto">
+        <a href="customer-api.html">Full API reference</a>
+        <a href="api-story.openapi.yaml" target="_blank">OpenAPI spec ↗</a>
+      </nav>
+    </div>
+
+    <div class="config-bar">
+      <div class="cfg-field">
+        <label for="cfg-url">Base URL</label>
+        <input id="cfg-url" type="text" value="http://127.0.0.1:8787" />
+      </div>
+      <div class="cfg-field">
+        <label for="cfg-token">Bearer token</label>
+        <input
+          id="cfg-token"
+          type="password"
+          placeholder="Clerk JWT"
+          style="min-width: 260px"
+        />
+      </div>
+      <button class="btn btn-secondary" id="btn-auth">Test auth</button>
+      <span id="auth-status" class="hint"></span>
+      <span id="auth-hint" class="hint" style="margin-left: auto"
+        >Open via
+        <code style="font-family: &quot;JetBrains Mono&quot;, monospace"
+          >http://127.0.0.1:4176/api-story.html</code
+        >
+        for auto token</span
+      >
+    </div>
+
+    <div class="steps" id="steps-root"></div>
+
+    <script>
+      const STEPS = [
+        { id: "book", n: 1, title: "Create Book", method: "POST /v1/books" },
+        {
+          id: "run",
+          n: 2,
+          title: "Create Run",
+          method: "POST /v1/books/{bookId}/runs",
+        },
+        {
+          id: "upload",
+          n: 3,
+          title: "Upload Photos",
+          method: "PUT upload-intent × N",
+        },
+        {
+          id: "start",
+          n: 4,
+          title: "Start Run",
+          method: "POST …/runs/{runId}/start",
+        },
+        {
+          id: "poll",
+          n: 5,
+          title: "Poll Status",
+          method: "GET …/runs/{runId}",
+        },
+      ];
+
+      const S = {
+        baseUrl: "http://127.0.0.1:8787",
+        token: "",
+        bookId: null,
+        runId: null,
+        uploads: [], // from createRun response
+        photoData: [], // { file, buffer, sha256 }
+        pollTimer: null,
+        minPhotos: 5,
+        maxPhotos: 10, // refreshed from GET /v1/pipeline-config
+        clerk: null,
+        status: {
+          book: "pending",
+          run: "pending",
+          upload: "pending",
+          start: "pending",
+          poll: "pending",
+        },
+        open: {
+          book: true,
+          run: false,
+          upload: false,
+          start: false,
+          poll: false,
+        },
+      };
+      const idem = {};
+
+      function idemKey(step) {
+        if (!idem[step])
+          idem[step] =
+            `story-${step}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+        return idem[step];
+      }
+
+      async function api(method, path, body, extraHeaders = {}) {
+        const headers = {
+          Authorization: `Bearer ${await freshToken()}`,
+          ...extraHeaders,
+        };
+        const opts = { method, headers };
+        if (body !== undefined && body !== null) {
+          if (body instanceof ArrayBuffer || body instanceof Uint8Array) {
+            opts.body = body;
+          } else {
+            headers["Content-Type"] = "application/json";
+            opts.body = JSON.stringify(body);
+          }
+        }
+        const res = await fetch(S.baseUrl + path, opts);
+        let data;
+        try {
+          data = await res.json();
+        } catch {
+          data = null;
+        }
+        return { ok: res.ok, status: res.status, data };
+      }
+
+      async function sha256hex(buf) {
+        const d = await crypto.subtle.digest("SHA-256", buf);
+        return Array.from(new Uint8Array(d), b =>
+          b.toString(16).padStart(2, "0")
+        ).join("");
+      }
+
+      function fmtSize(n) {
+        if (n < 1024) return n + " B";
+        if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+        return (n / 1048576).toFixed(1) + " MB";
+      }
+      function esc(s) {
+        return String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+      function fmt(o) {
+        try {
+          return JSON.stringify(o, null, 2);
+        } catch {
+          return String(o);
+        }
+      }
+      function g(id) {
+        return document.getElementById(id);
+      }
+
+      // ── Render ──────────────────────────────────────────────────────────────────
+
+      function render() {
+        const root = g("steps-root");
+        root.innerHTML = "";
+        STEPS.forEach(step => {
+          const st = S.status[step.id];
+          const open = S.open[step.id];
+          const wrap = document.createElement("div");
+          wrap.className = `step ${st}`;
+          wrap.id = `step-${step.id}`;
+
+          let numHtml = step.n;
+          if (st === "done") numHtml = "✓";
+          if (st === "error") numHtml = "!";
+
+          let badge = "";
+          if (st === "done")
+            badge = `<span class="badge badge-done">Done</span>`;
+          if (st === "error")
+            badge = `<span class="badge badge-err">Error</span>`;
+
+          wrap.innerHTML = `
+      <div class="step-num">${numHtml}</div>
+      <div class="step-card">
+        <div class="step-head" data-step="${step.id}">
+          <span class="step-title">${step.title}</span>
+          <span class="step-method">${step.method}</span>
+          ${badge}
+          <span class="chevron${open ? " open" : ""}">▾</span>
+        </div>
+        <div class="step-body" id="body-${step.id}"${open ? "" : " hidden"}>
+          ${bodyHtml(step.id)}
+        </div>
+      </div>`;
+          root.appendChild(wrap);
+        });
+
+        document.querySelectorAll(".step-head").forEach(h =>
+          h.addEventListener("click", () => {
+            const id = h.dataset.step;
+            S.open[id] = !S.open[id];
+            render();
+          })
+        );
+        bindButtons();
+      }
+
+      function bodyHtml(id) {
+        switch (id) {
+          case "book":
+            return `
+      <div class="field-row">
+        <div class="field"><label>Book title <small style="text-transform:none;font-weight:400">(optional)</small></label>
+          <input id="f-title" type="text" placeholder="Lily's Summer Adventure"></div>
+        <div class="field"><label>Child's name <small style="text-transform:none;font-weight:400">(optional)</small></label>
+          <input id="f-child" type="text" placeholder="Lily"></div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="btn-book">POST /v1/books</button>
+        <span id="book-hint" class="hint" hidden>Sending…</span>
+      </div>
+      <div id="book-resp"></div>`;
+
+          case "run":
+            return `
+      <div class="field-row">
+        <div class="field field-ro"><label>Book ID ${S.bookId ? '<span style="color:var(--done)">✓ from step 1</span>' : "— complete step 1 first"}</label>
+          <input id="f-bookid" type="text" value="${S.bookId || ""}" readonly></div>
+      </div>
+      <div>
+        <label style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)">
+          Photos — ${S.minPhotos} to ${S.maxPhotos}, max 25 MB each, JPEG / PNG / WebP
+        </label>
+        <div class="photo-zone" style="margin-top:6px" id="photo-zone">
+          <input type="file" id="f-photos" multiple accept="image/jpeg,image/png,image/webp">
+          <label class="photo-zone-label" for="f-photos">
+            <strong>Choose photos</strong> or drag and drop
+            <div style="font-size:11px;margin-top:3px;color:var(--muted)">SHA-256 computed locally — no upload until step 3</div>
+          </label>
+        </div>
+        <div class="photo-list" id="photo-list" style="margin-top:7px">${renderPhotoList()}</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="btn-run" ${!S.bookId || S.photoData.length < S.minPhotos || S.photoData.length > S.maxPhotos ? "disabled" : ""}>POST /v1/books/{bookId}/runs</button>
+        <span class="hint" id="photo-gate" hidden></span>
+        <span id="run-hint" class="hint" hidden>Sending…</span>
+      </div>
+      <div id="run-resp"></div>`;
+
+          case "upload":
+            return `
+      <div class="hint" style="margin-bottom:4px">
+        ${S.uploads.length ? `${S.uploads.length} upload intents — sends each photo to its assigned URL.` : "Complete step 2 first to get upload intents."}
+      </div>
+      ${S.uploads.length ? `<div class="prog-bar"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>` : ""}
+      <div class="photo-list" id="upload-list">
+        ${S.uploads
+          .map(
+            (u, i) => `
+          <div class="photo-item" id="ui-${i}">
+            <span class="pi-st" id="us-${i}">○</span>
+            <span class="pi-name">${esc(S.photoData[i]?.file.name || u.photoId)}</span>
+            <span class="pi-hash">${u.uploadIntentId.slice(0, 18)}…</span>
+          </div>`
+          )
+          .join("")}
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="btn-upload" ${!S.uploads.length ? "disabled" : ""}>Upload ${S.uploads.length || "N"} photos</button>
+        <span id="upload-hint" class="hint" hidden></span>
+      </div>
+      <div id="upload-resp"></div>`;
+
+          case "start":
+            return `
+      <div class="field-row">
+        <div class="field field-ro"><label>Book ID</label><input type="text" value="${S.bookId || ""}" readonly></div>
+        <div class="field field-ro"><label>Run ID</label><input type="text" value="${S.runId || ""}" readonly></div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="btn-start" ${!S.runId ? "disabled" : ""}>POST …/start</button>
+        <span id="start-hint" class="hint" hidden>Sending…</span>
+      </div>
+      <div id="start-resp"></div>`;
+
+          case "poll":
+            return `
+      <div class="field-row">
+        <div class="field field-ro"><label>Run ID</label><input type="text" value="${S.runId || ""}" readonly></div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="btn-poll" ${!S.runId ? "disabled" : ""}>Poll now</button>
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;color:var(--muted)">
+          <input type="checkbox" id="cb-auto"> Auto-poll every 3 s
+        </label>
+        <span id="poll-hint" class="hint" hidden></span>
+      </div>
+      <div id="poll-stats"></div>
+      <div id="poll-pages"></div>`;
+        }
+        return "";
+      }
+
+      function renderPhotoList() {
+        if (!S.photoData.length) return "";
+        return S.photoData
+          .map(
+            p => `
+    <div class="photo-item">
+      <span class="pi-st" style="color:var(--done)">✓</span>
+      <span class="pi-name">${esc(p.file.name)}</span>
+      <span class="pi-size">${fmtSize(p.file.size)}</span>
+      <span class="pi-hash">${p.sha256.slice(0, 12)}…</span>
+    </div>`
+          )
+          .join("");
+      }
+
+      function showResp(id, r) {
+        const el = g(id);
+        if (!el) return;
+        el.innerHTML = `<div class="resp ${r.ok ? "ok" : "err"}">
+    <div class="resp-head">HTTP ${r.status}</div>
+    <div class="resp-body">${esc(fmt(r.data))}</div>
+  </div>`;
+      }
+
+      // ── Button wiring ────────────────────────────────────────────────────────────
+
+      function bindButtons() {
+        g("btn-book")?.addEventListener("click", doBook);
+        g("f-photos")?.addEventListener("change", onPhotos);
+        g("btn-run")?.addEventListener("click", doRun);
+        g("btn-upload")?.addEventListener("click", doUpload);
+        g("btn-start")?.addEventListener("click", doStart);
+        g("btn-poll")?.addEventListener("click", () => doPoll());
+        g("cb-auto")?.addEventListener("change", e => {
+          if (e.target.checked) {
+            doPoll();
+            S.pollTimer = setInterval(doPoll, 3000);
+          } else {
+            clearInterval(S.pollTimer);
+            S.pollTimer = null;
+          }
+        });
+      }
+
+      // ── Handlers ─────────────────────────────────────────────────────────────────
+
+      g("btn-auth").addEventListener("click", async () => {
+        sync();
+        g("auth-status").textContent = "Testing…";
+        try {
+          const r = await api("GET", "/v1/books");
+          if (r.ok) {
+            g("auth-status").textContent =
+              `✓ OK — ${r.data?.books?.length ?? 0} books`;
+            g("auth-status").style.color = "var(--done)";
+          } else {
+            g("auth-status").textContent = `✗ HTTP ${r.status}`;
+            g("auth-status").style.color = "var(--err)";
+          }
+        } catch (e) {
+          g("auth-status").textContent = `✗ ${e.message}`;
+          g("auth-status").style.color = "var(--err)";
+        }
+      });
+
+      function sync() {
+        S.baseUrl = g("cfg-url").value.trim().replace(/\/$/, "");
+        S.token = g("cfg-token").value.trim();
+      }
+
+      async function doBook() {
+        sync();
+        const body = {};
+        const title = g("f-title")?.value.trim();
+        if (title) body.title = title;
+        const child = g("f-child")?.value.trim();
+        if (child) body.childName = child;
+        g("btn-book").disabled = true;
+        g("book-hint").hidden = false;
+        try {
+          const r = await api("POST", "/v1/books", body, {
+            "Idempotency-Key": idemKey("book"),
+          });
+          showResp("book-resp", r);
+          if (r.ok && r.data?.bookId) {
+            S.bookId = r.data.bookId;
+            S.status.book = "done";
+            S.open.book = false;
+            S.open.run = true;
+          } else {
+            S.status.book = "error";
+          }
+        } catch (e) {
+          showResp("book-resp", {
+            ok: false,
+            status: 0,
+            data: { error: e.message },
+          });
+          S.status.book = "error";
+        }
+        render();
+      }
+
+      async function onPhotos(e) {
+        const files = Array.from(e.target.files).slice(0, 20);
+        const list = g("photo-list");
+        if (list)
+          list.innerHTML = `<div class="hint">Computing SHA-256 for ${files.length} photos…</div>`;
+        S.photoData = [];
+        for (const file of files) {
+          const buffer = await file.arrayBuffer();
+          const sha256 = await sha256hex(buffer);
+          S.photoData.push({ file, buffer, sha256 });
+        }
+        if (list) list.innerHTML = renderPhotoList();
+        const btn = g("btn-run");
+        const n = S.photoData.length;
+        if (btn) {
+          btn.disabled = !(S.bookId && n >= S.minPhotos && n <= S.maxPhotos);
+          btn.title = !S.bookId
+            ? "Complete step 1 first"
+            : n < S.minPhotos
+              ? `Add ${S.minPhotos - n} more photo${S.minPhotos - n === 1 ? "" : "s"}`
+              : n > S.maxPhotos
+                ? `Remove ${n - S.maxPhotos} photo${n - S.maxPhotos === 1 ? "" : "s"}`
+                : "";
+        }
+        const gate = g("photo-gate");
+        if (gate) {
+          gate.textContent = btn?.title ?? "";
+          gate.hidden = !btn?.title;
+        }
+      }
+
+      async function doRun() {
+        sync();
+        const n = S.photoData.length;
+        if (!S.bookId || n < S.minPhotos || n > S.maxPhotos) return;
+        g("btn-run").disabled = true;
+        g("run-hint").hidden = false;
+        g("run-hint").textContent = "Creating run…";
+        const photos = S.photoData.map(p => ({
+          contentType: p.file.type,
+          byteSize: p.file.size,
+          sha256: p.sha256,
+        }));
+        try {
+          const r = await api(
+            "POST",
+            `/v1/books/${S.bookId}/runs`,
+            { photos },
+            { "Idempotency-Key": idemKey("run") }
+          );
+          showResp("run-resp", r);
+          if (r.ok && r.data?.runId) {
+            S.runId = r.data.runId;
+            S.uploads = r.data.uploads || [];
+            S.status.run = "done";
+            S.open.run = false;
+            S.open.upload = true;
+          } else {
+            S.status.run = "error";
+          }
+        } catch (e) {
+          showResp("run-resp", {
+            ok: false,
+            status: 0,
+            data: { error: e.message },
+          });
+          S.status.run = "error";
+        }
+        render();
+      }
+
+      async function doUpload() {
+        if (!S.uploads.length) return;
+        g("btn-upload").disabled = true;
+        let done = 0;
+        for (let i = 0; i < S.uploads.length; i++) {
+          const intent = S.uploads[i];
+          const p = S.photoData[i];
+          if (!p) break;
+          const stEl = g(`us-${i}`);
+          if (stEl) stEl.textContent = "…";
+          try {
+            const isLocal = intent.uploadUrl.startsWith("/v1/");
+            const url = isLocal
+              ? S.baseUrl + intent.uploadUrl
+              : intent.uploadUrl;
+            const headers = { ...intent.requiredHeaders };
+            if (!headers["Content-Type"] && !headers["content-type"])
+              headers["Content-Type"] = p.file.type;
+            if (isLocal)
+              headers["Authorization"] = `Bearer ${await freshToken()}`;
+            const res = await fetch(url, {
+              method: "PUT",
+              headers,
+              body: p.buffer,
+            });
+            if (res.ok || res.status === 201) {
+              done++;
+              if (stEl) {
+                stEl.textContent = "✓";
+                stEl.style.color = "var(--done)";
+              }
+            } else {
+              if (stEl) {
+                stEl.textContent = "✗";
+                stEl.style.color = "var(--err)";
+              }
+            }
+          } catch {
+            if (stEl) {
+              stEl.textContent = "✗";
+              stEl.style.color = "var(--err)";
+            }
+          }
+          const pct = Math.round(((i + 1) / S.uploads.length) * 100);
+          const fill = g("prog-fill");
+          if (fill) fill.style.width = pct + "%";
+          const hint = g("upload-hint");
+          if (hint) {
+            hint.hidden = false;
+            hint.textContent = `${i + 1}/${S.uploads.length} uploaded`;
+          }
+        }
+        if (done === S.uploads.length) {
+          S.status.upload = "done";
+          S.open.upload = false;
+          S.open.start = true;
+        } else {
+          S.status.upload = "error";
+          const resp = g("upload-resp");
+          if (resp)
+            resp.innerHTML = `<div class="resp err"><div class="resp-head">Partial</div><div class="resp-body">${done}/${S.uploads.length} succeeded</div></div>`;
+        }
+        render();
+      }
+
+      async function doStart() {
+        sync();
+        if (!S.runId) return;
+        g("btn-start").disabled = true;
+        g("start-hint").hidden = false;
+        try {
+          const r = await api(
+            "POST",
+            `/v1/books/${S.bookId}/runs/${S.runId}/start`,
+            {},
+            { "Idempotency-Key": idemKey("start") }
+          );
+          showResp("start-resp", r);
+          if (r.ok) {
+            S.status.start = "done";
+            S.open.start = false;
+            S.open.poll = true;
+          } else {
+            S.status.start = "error";
+          }
+        } catch (e) {
+          showResp("start-resp", {
+            ok: false,
+            status: 0,
+            data: { error: e.message },
+          });
+          S.status.start = "error";
+        }
+        render();
+      }
+
+      async function doPoll() {
+        if (!S.runId) return;
+        const hint = g("poll-hint");
+        if (hint) {
+          hint.hidden = false;
+          hint.textContent = "Polling…";
+        }
+        try {
+          const r = await api("GET", `/v1/books/${S.bookId}/runs/${S.runId}`);
+          if (!r.ok) {
+            if (hint) hint.textContent = `HTTP ${r.status}`;
+            return;
+          }
+          const d = r.data;
+          const statsEl = g("poll-stats");
+          if (statsEl)
+            statsEl.innerHTML = `
+      <div class="poll-stats">
+        <div class="ps"><div class="ps-label">Status</div><div class="ps-val ${d.status}">${d.status}</div></div>
+        <div class="ps"><div class="ps-label">Pages ready</div><div class="ps-val">${d.readyPageCount ?? "?"} / ${d.totalPageCount ?? "?"}</div></div>
+        <div class="ps"><div class="ps-label">Run</div><div class="ps-val" style="font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--muted);padding-top:4px">${d.runId}</div></div>
+      </div>`;
+          if (d.pages?.length) {
+            const pagesEl = g("poll-pages");
+            if (pagesEl)
+              pagesEl.innerHTML = `
+        <div style="margin-top:8px">
+          <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;margin-bottom:5px">Pages</div>
+          <div class="pages-grid">
+            ${d.pages.map(p => `<div class="page-chip ${p.state}"><span class="pc-id">${p.pageId}</span><span class="pc-state">${p.state}</span></div>`).join("")}
+          </div>
+        </div>`;
+          }
+          const terminal = ["completed", "failed", "cancelled"].includes(
+            d.status
+          );
+          if (terminal) {
+            S.status.poll = d.status === "completed" ? "done" : "error";
+            if (S.pollTimer) {
+              clearInterval(S.pollTimer);
+              S.pollTimer = null;
+            }
+            const cb = g("cb-auto");
+            if (cb) cb.checked = false;
+            if (hint) hint.textContent = `Stopped — run ${d.status}`;
+            // update step ring without full re-render
+            const stepEl = g("step-poll");
+            if (stepEl) {
+              stepEl.className = `step ${S.status.poll}`;
+              const num = stepEl.querySelector(".step-num");
+              if (num) num.textContent = S.status.poll === "done" ? "✓" : "!";
+            }
+          } else {
+            S.status.poll = "active";
+            if (hint)
+              hint.textContent = `Last polled ${new Date().toLocaleTimeString()}`;
+            const stepEl = g("step-poll");
+            if (stepEl) {
+              stepEl.className = "step active";
+              const num = stepEl.querySelector(".step-num");
+              if (num) num.textContent = "5";
+            }
+          }
+        } catch (e) {
+          if (hint) hint.textContent = `Error: ${e.message}`;
+        }
+      }
+
+      g("cfg-url").addEventListener(
+        "input",
+        e => (S.baseUrl = e.target.value.trim().replace(/\/$/, ""))
+      );
+      g("cfg-token").addEventListener(
+        "input",
+        e => (S.token = e.target.value.trim())
+      );
+
+      // Auto-fetch Clerk token — works when served from the web app's Vite dev server,
+      // which injects window.__CLERK_PK__ and shares localStorage with the signed-in app.
+      async function autoToken(clerk) {
+        try {
+          const token = await clerk.session?.getToken();
+          if (!token) return;
+          S.token = token;
+          g("cfg-token").value = token;
+          g("auth-status").textContent = "✓ Token auto-loaded from Clerk";
+          g("auth-status").style.color = "var(--done)";
+          g("auth-hint").hidden = true;
+          loadBounds();
+          setTimeout(() => autoToken(clerk), 55 * 60 * 1000);
+        } catch {}
+      }
+
+      // Clerk session tokens expire after ~60s, so mint one per request rather than
+      // reusing whatever was last written into the token field.
+      async function freshToken() {
+        if (!S.clerk) return S.token;
+        try {
+          const token = await S.clerk.session?.getToken();
+          if (token) {
+            S.token = token;
+            g("cfg-token").value = token;
+          }
+        } catch {}
+        return S.token;
+      }
+
+      // The photo count range is environment-specific, so take it from the API
+      // rather than hardcoding the production rule into the walkthrough.
+      async function loadBounds() {
+        try {
+          const res = await fetch(`${S.baseUrl}/v1/pipeline-config`, {
+            headers: { Authorization: `Bearer ${await freshToken()}` },
+          });
+          if (!res.ok) return;
+          const cfg = await res.json();
+          if (Number.isInteger(cfg.minPhotosPerRun))
+            S.minPhotos = cfg.minPhotosPerRun;
+          if (Number.isInteger(cfg.maxPhotosPerRun))
+            S.maxPhotos = cfg.maxPhotosPerRun;
+          render();
+        } catch {}
+      }
+
+      async function initClerk() {
+        const pk = window.__CLERK_PK__;
+        if (!pk) return; // served from docs server without key injection — user pastes manually
+
+        // Derive Clerk's own CDN URL from the publishable key (same as @clerk/react does internally)
+        // pk format: pk_[env]_[base64(fapi-host$)]
+        let fapiHost;
+        try {
+          fapiHost = atob(pk.split("_")[2] ?? "").replace(/\$+$/, "");
+        } catch {}
+        if (!fapiHost) return;
+
+        try {
+          // Load clerk-js from Clerk's CDN — reads existing localStorage/cookie session
+          // clerk-js is versioned separately from @clerk/react: react 6.x pins clerk-js 5.x,
+          // so this major must track @clerk/shared's clerk-js pin, not the react package version.
+          const script = Object.assign(document.createElement("script"), {
+            src: `https://${fapiHost}/npm/@clerk/clerk-js@5/dist/clerk.browser.js`,
+            crossOrigin: "anonymous",
+          });
+          script.setAttribute("data-clerk-publishable-key", pk);
+          await new Promise((res, rej) => {
+            script.onload = res;
+            script.onerror = rej;
+            document.head.appendChild(script);
+          });
+
+          // clerk-js v5 builds the instance itself from the data attribute
+          const clerk = window.Clerk;
+          await clerk.load();
+          S.clerk = clerk;
+
+          if (clerk.user) {
+            await autoToken(clerk);
+          } else {
+            const hint = g("auth-hint");
+            if (hint)
+              hint.textContent =
+                "Sign in to the app first, then reload this page";
+          }
+        } catch (e) {
+          console.warn("Clerk auto-auth failed:", e);
+        }
+      }
+
+      initClerk();
+
+      render();
+    </script>
+  </body>
+</html>
