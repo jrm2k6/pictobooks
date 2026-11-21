@@ -784,6 +784,15 @@ export class PipelineApi {
   ): Promise<ApiResponse> {
     return this.mutate(principal, key, `regenerate:${pageId}`, async stable => {
       this.assertGenerationProviderAvailable();
+      if (
+        (await this.countRegenerations(
+          bookId,
+          principal.userId,
+          "candidate_regeneration"
+        )) >= 3
+      ) {
+        throw new ApiProblem(403, "regeneration_limit_reached");
+      }
       const costCeilingMicros =
         requestedCostCeilingMicros ?? this.maximumCostPerPageMicros();
       if (
@@ -874,8 +883,8 @@ export class PipelineApi {
         this.database
           .prepare(
             `INSERT INTO book_run_regenerations
-             (new_run_id, source_run_id, source_page_id, requested_by, created_at, feedback_json)
-             VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(new_run_id) DO NOTHING`
+             (new_run_id, source_run_id, source_page_id, requested_by, created_at, feedback_json, kind)
+             VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(new_run_id) DO NOTHING`
           )
           .bind(
             runId,
@@ -883,7 +892,8 @@ export class PipelineApi {
             pageId,
             principal.userId,
             now,
-            JSON.stringify(feedback)
+            JSON.stringify(feedback),
+            "candidate_regeneration"
           ),
         this.database
           .prepare(
@@ -897,6 +907,22 @@ export class PipelineApi {
         body: { bookId, sourcePageId: pageId, runId, pageId: newPageId },
       };
     });
+  }
+
+  private async countRegenerations(
+    bookId: string,
+    requestedBy: string,
+    kind: "candidate_regeneration" | "photo_replacement"
+  ): Promise<number> {
+    const row = await this.database
+      .prepare(
+        `SELECT count(*) AS count FROM book_run_regenerations br
+         JOIN book_runs r ON r.run_id = br.new_run_id
+         WHERE r.book_id = ? AND br.requested_by = ? AND br.kind = ?`
+      )
+      .bind(bookId, requestedBy, kind)
+      .first<{ count: number }>();
+    return row?.count ?? 0;
   }
 
   private assertGenerationProviderAvailable(): void {

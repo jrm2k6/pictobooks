@@ -577,6 +577,40 @@ describe("WP6 authenticated pipeline API", () => {
     expect(await scalar("SELECT count(*) FROM book_run_regenerations")).toBe(1);
   });
 
+  it("caps regeneratePage at 3 per book per customer", async () => {
+    const seeded = await seedReviewablePage(); // existing helper, needs_human_review page
+    await api.reviewCandidate(
+      owner,
+      "approve-for-cap-001",
+      seeded.bookId,
+      seeded.pageId,
+      {
+        candidateId: seeded.candidateId,
+        decision: "approved",
+      }
+    );
+    for (let i = 0; i < 3; i += 1) {
+      const result = await api.regeneratePage(
+        owner,
+        `regen-cap-${i}`,
+        seeded.bookId,
+        seeded.pageId
+      );
+      expect(result.status).toBe(202);
+    }
+    await expect(
+      api.regeneratePage(owner, "regen-cap-4th", seeded.bookId, seeded.pageId)
+    ).rejects.toMatchObject({
+      status: 403,
+      code: "regeneration_limit_reached",
+    });
+    expect(
+      await scalar(
+        "SELECT count(*) FROM book_run_regenerations WHERE kind = 'candidate_regeneration'"
+      )
+    ).toBe(3);
+  });
+
   it("defaults book_run_regenerations.kind and rejects invalid values", async () => {
     const timestamp = new Date("2026-11-10T12:00:00.000Z").toISOString();
     await env.PIPELINE_DB.batch([
