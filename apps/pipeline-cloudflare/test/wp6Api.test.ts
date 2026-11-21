@@ -577,6 +577,46 @@ describe("WP6 authenticated pipeline API", () => {
     expect(await scalar("SELECT count(*) FROM book_run_regenerations")).toBe(1);
   });
 
+  it("defaults book_run_regenerations.kind and rejects invalid values", async () => {
+    const timestamp = new Date("2026-11-10T12:00:00.000Z").toISOString();
+    await env.PIPELINE_DB.batch([
+      env.PIPELINE_DB.prepare(
+        `INSERT INTO books (book_id, owner_id, status, created_at, updated_at)
+         VALUES ('book-kind-test', 'user-owner', 'review', ?, ?)`
+      ).bind(timestamp, timestamp),
+      env.PIPELINE_DB.prepare(
+        `INSERT INTO book_runs VALUES ('run-kind-a', 'book-kind-test', 'completed', 'pictobook-preschool-v0.1', 7000, 0, ?, ?, ?)`
+      ).bind(timestamp, timestamp, timestamp),
+      env.PIPELINE_DB.prepare(
+        `INSERT INTO book_runs VALUES ('run-kind-b', 'book-kind-test', 'created', 'pictobook-preschool-v0.1', 7000, 0, ?, ?, NULL)`
+      ).bind(timestamp, timestamp),
+      env.PIPELINE_DB.prepare(
+        `INSERT INTO photos (photo_id, run_id, ordinal, intake_status, created_at)
+         VALUES ('photo-kind-a', 'run-kind-a', 1, 'accepted', ?)`
+      ).bind(timestamp),
+      env.PIPELINE_DB.prepare(
+        `INSERT INTO pages (page_id, run_id, photo_id, state, initial_candidate_count, repair_round_count, approved_candidate_id, approval_source, terminal_reason, created_at, updated_at)
+         VALUES ('page-kind-a', 'run-kind-a', 'photo-kind-a', 'created', 0, 0, NULL, NULL, NULL, ?, ?)`
+      ).bind(timestamp, timestamp),
+    ]);
+    await env.PIPELINE_DB.prepare(
+      `INSERT INTO book_run_regenerations (new_run_id, source_run_id, source_page_id, requested_by, created_at)
+       VALUES ('run-kind-b', 'run-kind-a', 'page-kind-a', 'user-owner', ?)`
+    )
+      .bind(timestamp)
+      .run();
+    expect(
+      await scalar(
+        "SELECT kind FROM book_run_regenerations WHERE new_run_id = 'run-kind-b'"
+      )
+    ).toBe("candidate_regeneration");
+    await expect(
+      env.PIPELINE_DB.prepare(
+        `UPDATE book_run_regenerations SET kind = 'not_a_real_kind' WHERE new_run_id = 'run-kind-b'`
+      ).run()
+    ).rejects.toThrow();
+  });
+
   it("rejects a reviewable page with an exact Candidate revision", async () => {
     const seeded = await seedReviewablePage();
     const rejected = await api.reviewCandidate(
