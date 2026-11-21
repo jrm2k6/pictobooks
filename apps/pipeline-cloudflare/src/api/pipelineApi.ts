@@ -622,6 +622,7 @@ export class PipelineApi {
         pageId,
         photoId: page["photo_id"],
         state: page["state"],
+        terminalReason: (page["terminal_reason"] as string | null) ?? null,
         approvedCandidateId:
           (page["approved_candidate_id"] as string | null) ?? null,
         candidates: pageCandidates,

@@ -629,6 +629,25 @@ describe("WP6 authenticated pipeline API", () => {
     );
     return { bookId, runId: String(created.body.runId) };
   };
+
+  it("surfaces an intake-rejected page and its reason through GET book run status", async () => {
+    const seeded = await seedIntakeRejectedPage();
+
+    const response = await api.getBookRun(owner, seeded.bookId, seeded.runId);
+
+    expect(response.status).toBe(200);
+    const page = (response.body.pages as Array<Record<string, unknown>>).find(
+      p => p["pageId"] === seeded.pageId
+    );
+    expect(page).toMatchObject({
+      state: "intake_rejected",
+      terminalReason: "too_dark",
+    });
+    const photo = (response.body.photos as Array<Record<string, unknown>>).find(
+      p => p["photoId"] === seeded.photoId
+    );
+    expect(photo).toMatchObject({ intakeStatus: "rejected" });
+  });
 });
 
 const seedReviewablePage = async () => {
@@ -724,6 +743,44 @@ const seedReviewablePage = async () => {
     )
     .run();
   return { bookId, runId, pageId, candidateId, artifactId };
+};
+
+const seedIntakeRejectedPage = async () => {
+  const timestamp = new Date("2026-11-10T12:00:00.000Z").toISOString();
+  const bookId = "book-intake-rejected";
+  const runId = "run-intake-rejected";
+  const photoId = "photo-intake-rejected";
+  const pageId = "page-intake-rejected";
+  await env.PIPELINE_DB.batch([
+    env.PIPELINE_DB.prepare(
+      `INSERT INTO books (book_id, owner_id, status, created_at, updated_at)
+       VALUES (?, ?, 'review', ?, ?)`
+    ).bind(bookId, "user-owner", timestamp, timestamp),
+    env.PIPELINE_DB.prepare(
+      "INSERT INTO book_runs VALUES (?, ?, 'partially_completed', 'pictobook-preschool-v0.1', 7000, 0, ?, ?, ?)"
+    ).bind(runId, bookId, timestamp, timestamp, timestamp),
+    env.PIPELINE_DB.prepare(
+      "INSERT INTO photos VALUES (?, ?, 1, ?, 'rejected', ?)"
+    ).bind(photoId, runId, `source:${photoId}`, timestamp),
+    env.PIPELINE_DB.prepare(
+      `INSERT INTO pages
+       (page_id, run_id, photo_id, state, initial_candidate_count,
+        repair_round_count, approved_candidate_id, approval_source,
+        terminal_reason, created_at, updated_at)
+       VALUES (?, ?, ?, 'created', 0, 0, NULL, NULL, NULL, ?, ?)`
+    ).bind(pageId, runId, photoId, timestamp, timestamp),
+  ]);
+  await env.PIPELINE_DB.prepare(
+    "UPDATE pages SET state = 'analyzing' WHERE page_id = ?"
+  )
+    .bind(pageId)
+    .run();
+  await env.PIPELINE_DB.prepare(
+    "UPDATE pages SET state = 'intake_rejected', terminal_reason = 'too_dark' WHERE page_id = ?"
+  )
+    .bind(pageId)
+    .run();
+  return { bookId, runId, photoId, pageId };
 };
 
 // Keep sha256Hex in scope for helpers that compute hashes
