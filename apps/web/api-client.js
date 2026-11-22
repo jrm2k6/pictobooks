@@ -147,5 +147,54 @@ export function useApiClient() {
           throw new ApiError(res.status, `Upload failed: HTTP ${res.status}`);
         return res;
       }),
+
+    /** GET /v1/books/:bookId/runs → { runs: BookRunSummary[] } — note: the
+     * Worker returns raw snake_case columns here (the one endpoint that
+     * does), so this method maps them to camelCase before returning. */
+    listBookRuns: async bookId => {
+      const result = await request("GET", `/v1/books/${bookId}/runs`);
+      return {
+        runs: result.runs.map(run => ({
+          runId: run.run_id,
+          bookId: run.book_id,
+          status: run.status,
+          stylePackVersion: run.style_pack_version,
+          costCeilingMicros: run.cost_ceiling_micros,
+          costSpentMicros: run.cost_spent_micros,
+          createdAt: run.created_at,
+          updatedAt: run.updated_at,
+          completedAt: run.completed_at,
+        })),
+      };
+    },
+
+    /** POST /v1/books/:bookId/pages/:pageId/reviews → { reviewId, pageId, candidateId, decision } */
+    reviewCandidate: (bookId, pageId, data) =>
+      request("POST", `/v1/books/${bookId}/pages/${pageId}/reviews`, {
+        body: data,
+        withIdempotency: true,
+      }),
+
+    /** POST /v1/books/:bookId/pages/:pageId/regenerations → { bookId, sourcePageId, runId, pageId } */
+    regeneratePage: (bookId, pageId) =>
+      request("POST", `/v1/books/${bookId}/pages/${pageId}/regenerations`, {
+        withIdempotency: true,
+      }),
+
+    /** POST /v1/books/:bookId/pages/:pageId/photo-replacements → { bookId, runId, pageId, sourcePageId, upload } */
+    createPhotoReplacement: (bookId, pageId, data) =>
+      request(
+        "POST",
+        `/v1/books/${bookId}/pages/${pageId}/photo-replacements`,
+        {
+          body: data,
+          withIdempotency: true,
+        }
+      ),
+
+    /** GET /v1/artifacts/:id/access → { access: SignedArtifactRequest } — still
+     * requires the Bearer token even once you have the URL back. */
+    getArtifactAccess: artifactId =>
+      request("GET", `/v1/artifacts/${artifactId}/access`),
   };
 }
