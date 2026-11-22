@@ -811,14 +811,22 @@ Mirror the shallow rendering style already used in `apps/web/e2e/book-creation.s
 import { expect, test } from "@playwright/test";
 import { clerk, setupClerkTestingToken } from "@clerk/testing/playwright";
 
+const hasAuthCreds =
+  !!process.env.CLERK_SECRET_KEY && !!process.env.TEST_USER_EMAIL;
+
 test.describe("page review", () => {
+  test.skip(
+    !hasAuthCreds,
+    "Set CLERK_SECRET_KEY and TEST_USER_EMAIL to run authenticated flow tests"
+  );
+
   test.beforeEach(async ({ page }) => {
     await setupClerkTestingToken({ page });
     await clerk.signIn({
       page,
       signInParams: {
-        strategy: "ticket",
-        ticket: process.env.E2E_CLERK_TICKET,
+        strategy: "email_code",
+        identifier: process.env.TEST_USER_EMAIL,
       },
     });
     await page.goto("/books");
@@ -840,7 +848,7 @@ test.describe("page review", () => {
 });
 ```
 
-(Copy the exact `beforeEach`/`afterEach` Clerk sign-in boilerplate from `apps/web/e2e/book-creation.spec.js:45-60` rather than retyping it — it must match exactly for the testing token to work.)
+(This replaces an earlier draft of this plan that used a fabricated `strategy: "ticket"` sign-in — that doesn't match this repo's actual convention. Copy the exact `beforeEach`/`afterEach`/`test.skip` boilerplate from `apps/web/e2e/book-creation.spec.js:38-60` rather than retyping it — it must match exactly for the testing token to work. Note for whoever runs this: in a sandboxed environment without real network access to Clerk's API, authenticated e2e tests may not complete even with correct code and valid credentials — that's an environment limitation to report honestly, not a defect to chase.)
 
 - [ ] **Step 3: Run test to verify it fails**
 
@@ -921,14 +929,22 @@ git commit -m "feat(web): add real candidate-review screen, replacing the dead e
 import { expect, test } from "@playwright/test";
 import { clerk, setupClerkTestingToken } from "@clerk/testing/playwright";
 
+const hasAuthCreds =
+  !!process.env.CLERK_SECRET_KEY && !!process.env.TEST_USER_EMAIL;
+
 test.describe("book preview", () => {
+  test.skip(
+    !hasAuthCreds,
+    "Set CLERK_SECRET_KEY and TEST_USER_EMAIL to run authenticated flow tests"
+  );
+
   test.beforeEach(async ({ page }) => {
     await setupClerkTestingToken({ page });
     await clerk.signIn({
       page,
       signInParams: {
-        strategy: "ticket",
-        ticket: process.env.E2E_CLERK_TICKET,
+        strategy: "email_code",
+        identifier: process.env.TEST_USER_EMAIL,
       },
     });
     await page.goto("/books");
