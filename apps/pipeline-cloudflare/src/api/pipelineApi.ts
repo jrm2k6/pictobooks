@@ -571,21 +571,43 @@ export class PipelineApi {
         `SELECT kind, source_page_id FROM book_run_regenerations WHERE new_run_id = ?`
       )
       .bind(runId)
-      .first<{ kind: string; source_page_id: string }>();
+      .first<{
+        kind: "candidate_regeneration" | "photo_replacement";
+        source_page_id: string;
+      }>();
 
-    const [photosResult, artifactsResult] = await Promise.all([
-      this.database
-        .prepare("SELECT * FROM photos WHERE run_id = ? ORDER BY ordinal")
-        .bind(runId)
-        .all(),
-      this.database
-        .prepare(
-          `SELECT artifact_id, page_id, artifact_kind, mime_type, byte_size, created_at
+    const [photosResult, artifactsResult, uploadIntentsResult] =
+      await Promise.all([
+        this.database
+          .prepare("SELECT * FROM photos WHERE run_id = ? ORDER BY ordinal")
+          .bind(runId)
+          .all(),
+        this.database
+          .prepare(
+            `SELECT artifact_id, page_id, artifact_kind, mime_type, byte_size, created_at
            FROM artifacts WHERE run_id = ? AND deleted_at IS NULL ORDER BY created_at`
-        )
-        .bind(runId)
-        .all(),
-    ]);
+          )
+          .bind(runId)
+          .all(),
+        this.database
+          .prepare(
+            `SELECT ui.expires_at AS expires_at, ph.source_artifact_id AS source_artifact_id
+             FROM upload_intents ui
+             JOIN photos ph ON ph.photo_id = ui.photo_id
+             WHERE ui.run_id = ?`
+          )
+          .bind(runId)
+          .all<{ expires_at: string; source_artifact_id: string | null }>(),
+      ]);
+
+    const nowIso = this.isoNow();
+    // A required photo's upload intent expired without ever completing
+    // (closed tab, network drop, the 15-minute window passed). startBookRun
+    // requires every upload intent to be complete before it can launch, so
+    // this run is a dead end once any one of them has expired unresolved.
+    const uploadExpired = uploadIntentsResult.results.some(
+      row => row.source_artifact_id === null && row.expires_at <= nowIso
+    );
 
     const run = statusData.run as Record<string, unknown>;
     const pages = statusData.pages as Array<Record<string, unknown>>;
@@ -646,6 +668,7 @@ export class PipelineApi {
         createdAt: run["created_at"],
         completedAt: (run["completed_at"] as string | null) ?? null,
         regenerationKind: lineage?.kind ?? null,
+        uploadExpired,
         readyPageCount,
         totalPageCount: pages.length,
         pages: mappedPages,
@@ -793,6 +816,10 @@ export class PipelineApi {
   ): Promise<ApiResponse> {
     return this.mutate(principal, key, `regenerate:${pageId}`, async stable => {
       this.assertGenerationProviderAvailable();
+      // Soft cap: two concurrent requests with different idempotency keys
+      // could both read a count below 3 before either insert, letting the
+      // cap be exceeded by one. Accepted (matches the idempotency-key
+      // limitation elsewhere in this file); not a hard guarantee.
       if (
         (await this.countRegenerations(
           bookId,
@@ -930,7 +957,12 @@ export class PipelineApi {
       key,
       `photo_replacement:${pageId}`,
       async stable => {
+        this.assertGenerationProviderAvailable();
         validatePhotos([input]);
+        // Soft cap: two concurrent requests with different idempotency keys
+        // could both read a count below 3 before either insert, letting the
+        // cap be exceeded by one. Accepted (matches the idempotency-key
+        // limitation elsewhere in this file); not a hard guarantee.
         if (
           (await this.countRegenerations(
             bookId,
@@ -1100,6 +1132,24 @@ export class PipelineApi {
     requestedBy: string,
     kind: "candidate_regeneration" | "photo_replacement"
   ): Promise<number> {
+    if (kind === "photo_replacement") {
+      // A photo replacement's upload may never complete (tab closed,
+      // network drop, the 15-minute upload window passes). Don't let an
+      // abandoned, expired replacement permanently count against the cap.
+      const row = await this.database
+        .prepare(
+          `SELECT count(*) AS count FROM book_run_regenerations br
+           JOIN book_runs r ON r.run_id = br.new_run_id
+           JOIN upload_intents ui ON ui.run_id = br.new_run_id
+           WHERE r.book_id = ? AND br.requested_by = ? AND br.kind = ?
+             AND (ui.completed_at IS NOT NULL OR ui.expires_at > ?)`
+        )
+        .bind(bookId, requestedBy, kind, this.isoNow())
+        .first<{ count: number }>();
+      return row?.count ?? 0;
+    }
+    // candidate_regeneration reuses an existing artifact; there is no
+    // upload-window concept to exclude, so count every row as today.
     const row = await this.database
       .prepare(
         `SELECT count(*) AS count FROM book_run_regenerations br

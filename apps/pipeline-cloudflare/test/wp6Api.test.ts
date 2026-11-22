@@ -677,6 +677,47 @@ describe("WP6 authenticated pipeline API", () => {
     ).toBe("created");
   });
 
+  it("leaves the original intake-rejected page unmutated after a successful photo replacement", async () => {
+    const seeded = await seedIntakeRejectedPage();
+    const before = await env.PIPELINE_DB.prepare(
+      "SELECT state, terminal_reason, updated_at FROM pages WHERE page_id = ?"
+    )
+      .bind(seeded.pageId)
+      .first<{
+        state: string;
+        terminal_reason: string | null;
+        updated_at: string;
+      }>();
+    expect(before?.state).toBe("intake_rejected");
+
+    const created = await api.createPhotoReplacement(
+      owner,
+      "photo-replacement-unmutated-001",
+      seeded.bookId,
+      seeded.pageId,
+      { contentType: "image/jpeg", byteSize: 1024, sha256: "f".repeat(64) }
+    );
+    expect(created.status).toBe(201);
+
+    const after = await env.PIPELINE_DB.prepare(
+      "SELECT state, terminal_reason, updated_at FROM pages WHERE page_id = ?"
+    )
+      .bind(seeded.pageId)
+      .first<{
+        state: string;
+        terminal_reason: string | null;
+        updated_at: string;
+      }>();
+    expect(after).toEqual(before);
+    expect(after?.state).toBe("intake_rejected");
+
+    expect(
+      await scalar(
+        `SELECT count(*) FROM pages WHERE page_id = '${created.body.pageId}' AND state = 'created'`
+      )
+    ).toBe(1);
+  });
+
   it("rejects a photo replacement for a page that isn't intake-rejected", async () => {
     const seeded = await seedReviewablePage(); // needs_human_review, not intake_rejected
     await expect(
@@ -788,6 +829,73 @@ describe("WP6 authenticated pipeline API", () => {
     });
   });
 
+  it("does not count an abandoned, expired photo replacement against the cap", async () => {
+    // Uses its own clock-controlled PipelineApi instance so "now" can be
+    // advanced past the 15-minute upload window without affecting other
+    // tests that rely on the module-level fixed `now`.
+    let clockNow = now;
+    const clockedApi = new PipelineApi(
+      env.PIPELINE_DB,
+      env.PIPELINE_ARTIFACTS,
+      new FakeSigner(),
+      launcher,
+      () => clockNow
+    );
+    const seeded = await seedIntakeRejectedPage();
+
+    // Abandoned replacement: upload intent is created but never completed.
+    const abandoned = await clockedApi.createPhotoReplacement(
+      owner,
+      "photo-replacement-expiry-abandoned",
+      seeded.bookId,
+      seeded.pageId,
+      { contentType: "image/jpeg", byteSize: 1024, sha256: "a".repeat(64) }
+    );
+    expect(abandoned.status).toBe(201);
+
+    // Advance the clock past the 15-minute upload-intent expiry window.
+    // The abandoned replacement's upload is now dead and must not count
+    // against the 3-replacement cap.
+    clockNow = new Date(now.getTime() + 16 * 60 * 1000);
+
+    // Three more replacements on the same page should all succeed: the
+    // abandoned+expired one is excluded, so the cap only sees these three.
+    for (let i = 0; i < 3; i += 1) {
+      const result = await clockedApi.createPhotoReplacement(
+        owner,
+        `photo-replacement-expiry-live-${i}`,
+        seeded.bookId,
+        seeded.pageId,
+        { contentType: "image/jpeg", byteSize: 1024, sha256: `${i}`.repeat(64) }
+      );
+      expect(result.status).toBe(201);
+    }
+
+    // A 4th live replacement (on top of the 3 that count) must now be
+    // rejected: the cap is reached by the three live ones, not the
+    // abandoned+expired one.
+    await expect(
+      clockedApi.createPhotoReplacement(
+        owner,
+        "photo-replacement-expiry-live-4th",
+        seeded.bookId,
+        seeded.pageId,
+        { contentType: "image/jpeg", byteSize: 1024, sha256: "b".repeat(64) }
+      )
+    ).rejects.toMatchObject({
+      status: 403,
+      code: "photo_replacement_limit_reached",
+    });
+
+    // Confirm all 4 rows exist (1 abandoned + 3 live), proving the cap
+    // excluded the abandoned one rather than never having created it.
+    expect(
+      await scalar(
+        "SELECT count(*) FROM book_run_regenerations WHERE kind = 'photo_replacement'"
+      )
+    ).toBe(4);
+  });
+
   it("rejects a stranger's photo-replacement call on someone else's book", async () => {
     const seeded = await seedIntakeRejectedPage();
     await expect(
@@ -869,6 +977,42 @@ describe("WP6 authenticated pipeline API", () => {
         primaryView.body.pages as Array<{ replacesPageId: string | null }>
       ).every(page => page.replacesPageId === null)
     ).toBe(true);
+  });
+
+  it("flags uploadExpired on getBookRun once a required upload intent expires without completing", async () => {
+    let clockNow = now;
+    const clockedApi = new PipelineApi(
+      env.PIPELINE_DB,
+      env.PIPELINE_ARTIFACTS,
+      new FakeSigner(),
+      launcher,
+      () => clockNow
+    );
+    const book = await clockedApi.createBook(owner, "upload-expired-book-001");
+    const bookId = String(book.body.bookId);
+    const created = await clockedApi.createBookRun(
+      owner,
+      "upload-expired-run-001",
+      bookId,
+      {
+        photos: [
+          {
+            contentType: "image/jpeg",
+            byteSize: photoBytes.byteLength,
+            sha256: await digest(photoBytes),
+          },
+        ],
+      }
+    );
+    const runId = String(created.body.runId);
+
+    const beforeExpiry = await clockedApi.getBookRun(owner, bookId, runId);
+    expect(beforeExpiry.body.uploadExpired).toBe(false);
+
+    // Never uploaded; advance the clock past the 15-minute upload window.
+    clockNow = new Date(now.getTime() + 16 * 60 * 1000);
+    const afterExpiry = await clockedApi.getBookRun(owner, bookId, runId);
+    expect(afterExpiry.body.uploadExpired).toBe(true);
   });
 
   it("rejects a reviewable page with an exact Candidate revision", async () => {
