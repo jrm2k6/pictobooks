@@ -651,6 +651,184 @@ describe("WP6 authenticated pipeline API", () => {
     ).rejects.toThrow();
   });
 
+  it("creates a photo-replacement upload for an intake-rejected page", async () => {
+    const seeded = await seedIntakeRejectedPage();
+    const created = await api.createPhotoReplacement(
+      owner,
+      "photo-replacement-001",
+      seeded.bookId,
+      seeded.pageId,
+      { contentType: "image/jpeg", byteSize: 1024, sha256: "a".repeat(64) }
+    );
+    expect(created.status).toBe(201);
+    expect(created.body.sourcePageId).toBe(seeded.pageId);
+    expect(
+      String((created.body.upload as { uploadUrl: string }).uploadUrl)
+    ).toContain("signature=test");
+    expect(
+      await scalar(
+        `SELECT kind FROM book_run_regenerations WHERE new_run_id = '${created.body.runId}'`
+      )
+    ).toBe("photo_replacement");
+    expect(
+      await scalar(
+        `SELECT state FROM pages WHERE page_id = '${created.body.pageId}'`
+      )
+    ).toBe("created");
+  });
+
+  it("rejects a photo replacement for a page that isn't intake-rejected", async () => {
+    const seeded = await seedReviewablePage(); // needs_human_review, not intake_rejected
+    await expect(
+      api.createPhotoReplacement(
+        owner,
+        "photo-replacement-002",
+        seeded.bookId,
+        seeded.pageId,
+        {
+          contentType: "image/jpeg",
+          byteSize: 1024,
+          sha256: "b".repeat(64),
+        }
+      )
+    ).rejects.toMatchObject({ status: 409, code: "page_not_replaceable" });
+  });
+
+  it("caps photo replacements at 3 per book, independently of regeneratePage's cap in both directions", async () => {
+    const reviewable = await seedReviewablePage();
+    await api.reviewCandidate(
+      owner,
+      "approve-indep-001",
+      reviewable.bookId,
+      reviewable.pageId,
+      {
+        candidateId: reviewable.candidateId,
+        decision: "approved",
+      }
+    );
+    for (let i = 0; i < 3; i += 1) {
+      expect(
+        (
+          await api.regeneratePage(
+            owner,
+            `regen-indep-${i}`,
+            reviewable.bookId,
+            reviewable.pageId
+          )
+        ).status
+      ).toBe(202);
+    }
+    // seedIntakeRejectedPage uses a different bookId than seedReviewablePage, so make
+    // this one share reviewable.bookId instead, by seeding its page directly into that book.
+    const intakeRejectedPageId = "page-indep-intake";
+    const timestamp = new Date("2026-11-10T12:00:00.000Z").toISOString();
+    await env.PIPELINE_DB.batch([
+      env.PIPELINE_DB.prepare(
+        "INSERT INTO book_runs VALUES ('run-indep-intake', ?, 'partially_completed', 'pictobook-preschool-v0.1', 7000, 0, ?, ?, ?)"
+      ).bind(reviewable.bookId, timestamp, timestamp, timestamp),
+      env.PIPELINE_DB.prepare(
+        "INSERT INTO photos VALUES ('photo-indep-intake', 'run-indep-intake', 1, 'source:photo-indep-intake', 'pending', ?)"
+      ).bind(timestamp),
+      env.PIPELINE_DB.prepare(
+        `INSERT INTO pages (page_id, run_id, photo_id, state, initial_candidate_count, repair_round_count, approved_candidate_id, approval_source, terminal_reason, created_at, updated_at)
+         VALUES (?, 'run-indep-intake', 'photo-indep-intake', 'created', 0, 0, NULL, NULL, NULL, ?, ?)`
+      ).bind(intakeRejectedPageId, timestamp, timestamp),
+    ]);
+    await env.PIPELINE_DB.prepare(
+      "UPDATE pages SET state = 'analyzing' WHERE page_id = ?"
+    )
+      .bind(intakeRejectedPageId)
+      .run();
+    await env.PIPELINE_DB.prepare(
+      "UPDATE pages SET state = 'intake_rejected', terminal_reason = 'too_dark' WHERE page_id = ?"
+    )
+      .bind(intakeRejectedPageId)
+      .run();
+    // regeneratePage's cap is already maxed on this book — createPhotoReplacement must still work.
+    for (let i = 0; i < 3; i += 1) {
+      expect(
+        (
+          await api.createPhotoReplacement(
+            owner,
+            `photo-replacement-cap-${i}`,
+            reviewable.bookId,
+            intakeRejectedPageId,
+            {
+              contentType: "image/jpeg",
+              byteSize: 1024,
+              sha256: `${i}`.repeat(64),
+            }
+          )
+        ).status
+      ).toBe(201);
+    }
+    await expect(
+      api.createPhotoReplacement(
+        owner,
+        "photo-replacement-cap-4th",
+        reviewable.bookId,
+        intakeRejectedPageId,
+        { contentType: "image/jpeg", byteSize: 1024, sha256: "c".repeat(64) }
+      )
+    ).rejects.toMatchObject({
+      status: 403,
+      code: "photo_replacement_limit_reached",
+    });
+    // and regeneratePage must still be blocked by its own already-maxed cap, unaffected by the 3 replacements
+    await expect(
+      api.regeneratePage(
+        owner,
+        "regen-indep-still-capped",
+        reviewable.bookId,
+        reviewable.pageId
+      )
+    ).rejects.toMatchObject({
+      status: 403,
+      code: "regeneration_limit_reached",
+    });
+  });
+
+  it("rejects a stranger's photo-replacement call on someone else's book", async () => {
+    const seeded = await seedIntakeRejectedPage();
+    await expect(
+      api.createPhotoReplacement(
+        stranger,
+        "photo-replacement-stranger-001",
+        seeded.bookId,
+        seeded.pageId,
+        {
+          contentType: "image/jpeg",
+          byteSize: 1024,
+          sha256: "d".repeat(64),
+        }
+      )
+    ).rejects.toMatchObject({ status: 404, code: "page_not_found" });
+  });
+
+  it("replays a photo-replacement call idempotently instead of creating a second run", async () => {
+    const seeded = await seedIntakeRejectedPage();
+    const first = await api.createPhotoReplacement(
+      owner,
+      "photo-replacement-idempotent-001",
+      seeded.bookId,
+      seeded.pageId,
+      { contentType: "image/jpeg", byteSize: 1024, sha256: "e".repeat(64) }
+    );
+    const replayed = await api.createPhotoReplacement(
+      owner,
+      "photo-replacement-idempotent-001",
+      seeded.bookId,
+      seeded.pageId,
+      { contentType: "image/jpeg", byteSize: 1024, sha256: "e".repeat(64) }
+    );
+    expect(replayed).toEqual(first);
+    expect(
+      await scalar(
+        "SELECT count(*) FROM book_run_regenerations WHERE kind = 'photo_replacement'"
+      )
+    ).toBe(1);
+  });
+
   it("rejects a reviewable page with an exact Candidate revision", async () => {
     const seeded = await seedReviewablePage();
     const rejected = await api.reviewCandidate(
@@ -798,6 +976,44 @@ const seedReviewablePage = async () => {
     )
     .run();
   return { bookId, runId, pageId, candidateId, artifactId };
+};
+
+const seedIntakeRejectedPage = async () => {
+  const timestamp = new Date("2026-11-10T12:00:00.000Z").toISOString();
+  const bookId = "book-intake-owner";
+  const runId = "run-intake-owner";
+  const photoId = "photo-intake-owner";
+  const pageId = "page-intake-owner";
+  await env.PIPELINE_DB.batch([
+    env.PIPELINE_DB.prepare(
+      `INSERT INTO books (book_id, owner_id, status, created_at, updated_at)
+       VALUES (?, ?, 'review', ?, ?)`
+    ).bind(bookId, "user-owner", timestamp, timestamp),
+    env.PIPELINE_DB.prepare(
+      "INSERT INTO book_runs VALUES (?, ?, 'partially_completed', 'pictobook-preschool-v0.1', 7000, 0, ?, ?, ?)"
+    ).bind(runId, bookId, timestamp, timestamp, timestamp),
+    env.PIPELINE_DB.prepare(
+      "INSERT INTO photos VALUES (?, ?, 1, ?, 'pending', ?)"
+    ).bind(photoId, runId, `source:${photoId}`, timestamp),
+    env.PIPELINE_DB.prepare(
+      `INSERT INTO pages
+       (page_id, run_id, photo_id, state, initial_candidate_count,
+        repair_round_count, approved_candidate_id, approval_source,
+        terminal_reason, created_at, updated_at)
+       VALUES (?, ?, ?, 'created', 0, 0, NULL, NULL, NULL, ?, ?)`
+    ).bind(pageId, runId, photoId, timestamp, timestamp),
+  ]);
+  await env.PIPELINE_DB.prepare(
+    "UPDATE pages SET state = 'analyzing' WHERE page_id = ?"
+  )
+    .bind(pageId)
+    .run();
+  await env.PIPELINE_DB.prepare(
+    "UPDATE pages SET state = 'intake_rejected', terminal_reason = 'too_dark' WHERE page_id = ?"
+  )
+    .bind(pageId)
+    .run();
+  return { bookId, runId, pageId };
 };
 
 // Keep sha256Hex in scope for helpers that compute hashes

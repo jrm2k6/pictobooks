@@ -321,6 +321,31 @@ const route = async (
     );
   }
 
+  const photoReplacements = url.pathname.match(
+    /^\/v1\/books\/([^/]+)\/pages\/([^/]+)\/photo-replacements$/
+  );
+  if (request.method === "POST" && photoReplacements) {
+    const body = await readJson<{
+      contentType?: string;
+      byteSize?: number;
+      sha256?: string;
+    }>(request);
+    if (!body.contentType || !body.byteSize || !body.sha256) {
+      throw new ApiProblem(400, "invalid_photo_replacement");
+    }
+    return api.createPhotoReplacement(
+      principal,
+      idempotencyKey(request),
+      safePathId(photoReplacements[1]),
+      safePathId(photoReplacements[2]),
+      body as {
+        contentType: "image/jpeg" | "image/png" | "image/webp";
+        byteSize: number;
+        sha256: string;
+      }
+    );
+  }
+
   const canonical = url.pathname.match(
     /^\/v1\/books\/([^/]+)\/candidates\/([^/]+)\/canonical-promotions$/
   );

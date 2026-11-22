@@ -909,6 +909,183 @@ export class PipelineApi {
     });
   }
 
+  createPhotoReplacement(
+    principal: Principal,
+    key: string,
+    bookId: string,
+    pageId: string,
+    input: PhotoUploadInput
+  ): Promise<ApiResponse> {
+    return this.mutate(
+      principal,
+      key,
+      `photo_replacement:${pageId}`,
+      async stable => {
+        validatePhotos([input]);
+        if (
+          (await this.countRegenerations(
+            bookId,
+            principal.userId,
+            "photo_replacement"
+          )) >= 3
+        ) {
+          throw new ApiProblem(403, "photo_replacement_limit_reached");
+        }
+        const source = await this.database
+          .prepare(
+            `SELECT p.run_id AS source_run_id, p.state, r.style_pack_version
+             FROM pages p
+             JOIN book_runs r ON r.run_id = p.run_id
+             JOIN books b ON b.book_id = r.book_id
+             WHERE p.page_id = ? AND r.book_id = ? AND b.owner_id = ?`
+          )
+          .bind(pageId, bookId, principal.userId)
+          .first<{
+            source_run_id: string;
+            state: string;
+            style_pack_version: string;
+          }>();
+        if (!source) throw new ApiProblem(404, "page_not_found");
+        if (
+          !["intake_rejected", "intake_needs_review"].includes(source.state)
+        ) {
+          throw new ApiProblem(409, "page_not_replaceable");
+        }
+        const runId = `run-${stable}`;
+        const photoId = `photo-1-${stable}`;
+        const newPageId = `page-1-${stable}`;
+        const artifactId = `source:${photoId}`;
+        const objectKey = objectKeys.sourcePhoto({
+          bookId,
+          runId,
+          photoId,
+          revision: "v1",
+        });
+        const now = this.isoNow();
+        const costCeilingMicros = this.maximumCostPerPageMicros();
+        const intent: UploadIntentRow = {
+          upload_intent_id: `upload-1-${stable}`,
+          book_id: bookId,
+          run_id: runId,
+          photo_id: photoId,
+          artifact_id: artifactId,
+          object_key: objectKey,
+          content_type: input.contentType,
+          byte_size: input.byteSize,
+          sha256: input.sha256,
+          expires_at: new Date(
+            this.now().getTime() + UPLOAD_EXPIRY_SECONDS * 1000
+          ).toISOString(),
+          completed_at: null,
+          created_at: now,
+        };
+        await this.database.batch([
+          this.database
+            .prepare(
+              `INSERT INTO book_runs
+               (run_id, book_id, status, style_pack_version, cost_ceiling_micros,
+                cost_spent_micros, created_at, updated_at, completed_at)
+               VALUES (?, ?, 'created', ?, ?, 0, ?, ?, NULL)
+               ON CONFLICT(run_id) DO NOTHING`
+            )
+            .bind(
+              runId,
+              bookId,
+              source.style_pack_version,
+              costCeilingMicros,
+              now,
+              now
+            ),
+          this.database
+            .prepare(
+              `INSERT INTO book_run_execution_configs
+               (run_id, provider, model, style_judge_model, execution_profile,
+                candidate_cost_micros, style_judge_cost_micros,
+                initial_candidate_count, created_at)
+               VALUES (?, ?, ?, ?, 'mock_pass_after_repair', ?, ?, ?, ?)
+               ON CONFLICT(run_id) DO NOTHING`
+            )
+            .bind(
+              runId,
+              this.generation.provider,
+              this.generation.model,
+              this.generation.styleJudgeModel,
+              this.generation.candidateCostMicros,
+              this.generation.styleJudgeCostMicros,
+              this.generation.initialCandidateCount,
+              now
+            ),
+          this.database
+            .prepare(
+              `INSERT INTO photos
+               (photo_id, run_id, ordinal, source_artifact_id, intake_status, created_at)
+               VALUES (?, ?, 1, NULL, 'pending', ?) ON CONFLICT(photo_id) DO NOTHING`
+            )
+            .bind(photoId, runId, now),
+          this.database
+            .prepare(
+              `INSERT INTO pages
+               (page_id, run_id, photo_id, state, initial_candidate_count,
+                repair_round_count, approved_candidate_id, approval_source,
+                terminal_reason, created_at, updated_at)
+               VALUES (?, ?, ?, 'created', 0, 0, NULL, NULL, NULL, ?, ?)
+               ON CONFLICT(page_id) DO NOTHING`
+            )
+            .bind(newPageId, runId, photoId, now, now),
+          this.database
+            .prepare(
+              `INSERT INTO upload_intents
+               (upload_intent_id, owner_id, book_id, run_id, photo_id, artifact_id,
+                object_key, content_type, byte_size, sha256, expires_at,
+                completed_at, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+               ON CONFLICT(upload_intent_id) DO NOTHING`
+            )
+            .bind(
+              intent.upload_intent_id,
+              principal.userId,
+              bookId,
+              runId,
+              photoId,
+              artifactId,
+              objectKey,
+              input.contentType,
+              input.byteSize,
+              input.sha256,
+              intent.expires_at,
+              now
+            ),
+          this.database
+            .prepare(
+              `INSERT INTO book_run_regenerations
+               (new_run_id, source_run_id, source_page_id, requested_by, created_at, feedback_json, kind)
+               VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(new_run_id) DO NOTHING`
+            )
+            .bind(
+              runId,
+              source.source_run_id,
+              pageId,
+              principal.userId,
+              now,
+              JSON.stringify({}),
+              "photo_replacement"
+            ),
+        ]);
+        const upload = await this.signIntent(intent);
+        return {
+          status: 201,
+          body: {
+            bookId,
+            runId,
+            pageId: newPageId,
+            sourcePageId: pageId,
+            upload,
+          },
+        };
+      }
+    );
+  }
+
   private async countRegenerations(
     bookId: string,
     requestedBy: string,
