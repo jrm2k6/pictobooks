@@ -29,11 +29,18 @@ export function reconcilePageSlots({ primaryRun, otherRuns }) {
     ) {
       current = next;
     }
+    // Looked up from whichever run/page the slot *currently* resolves to,
+    // not the original primary page — a photo replacement's new photo has
+    // a genuinely different sourceArtifactId than what it replaced.
+    const sourceArtifactId =
+      current.run.photos?.find(p => p.photoId === current.page.photoId)
+        ?.sourceArtifactId ?? null;
     return {
       originalPageId: originalPage.pageId,
       currentRunId: current.run.runId,
       currentPageId: current.page.pageId,
       currentPage: current.page,
+      sourceArtifactId,
     };
   });
 

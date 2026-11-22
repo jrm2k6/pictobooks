@@ -220,11 +220,12 @@ function PageDetail({ slot, review, onBack }) {
   const { url: candidateUrl } = useArtifactAccess(
     candidate?.artifactId ?? null
   );
-  // The uploaded source photo artifact for a page follows a fixed naming
-  // convention server-side (`source:${photoId}`) — see bookRun.ts/pipelineApi.ts.
-  const { url: sourceUrl } = useArtifactAccess(
-    page.photoId ? `source:${page.photoId}` : null
-  );
+  // sourceArtifactId comes straight from reconcilePageSlots, which looks it
+  // up from the current run's `photos` list by the current page's photoId —
+  // useArtifactAccess's own `enabled: Boolean(artifactId)` guard already
+  // handles a null id (e.g. a lookup miss) the same way it handles any
+  // other missing artifact id.
+  const { url: sourceUrl } = useArtifactAccess(slot.sourceArtifactId);
   const hasCandidate = Boolean(candidate);
 
   async function run(action) {

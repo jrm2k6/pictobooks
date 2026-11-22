@@ -31,16 +31,61 @@ describe("reconcilePageSlots", () => {
         currentRunId: "run-primary",
         currentPageId: "page-1",
         currentPage: primaryRun.pages[0],
+        sourceArtifactId: null,
       },
       {
         originalPageId: "page-2",
         currentRunId: "run-primary",
         currentPageId: "page-2",
         currentPage: primaryRun.pages[1],
+        sourceArtifactId: null,
       },
     ]);
     expect(result.regenerationsUsed).toBe(0);
     expect(result.replacementsUsed).toBe(0);
+  });
+
+  it("looks up sourceArtifactId from the current run's photos, by the current page's photoId", () => {
+    const primaryRun = {
+      ...run("run-primary", "2026-11-21T00:00:00Z", [
+        page("page-1", { photoId: "photo-1" }),
+      ]),
+      photos: [{ photoId: "photo-1", sourceArtifactId: "source:original" }],
+    };
+    const result = reconcilePageSlots({ primaryRun, otherRuns: [] });
+    expect(result.slots[0].sourceArtifactId).toBe("source:original");
+  });
+
+  it("tracks the replacement run's own sourceArtifactId, not the original photo's", () => {
+    const primaryRun = {
+      ...run("run-primary", "2026-11-21T00:00:00Z", [
+        page("page-1", { photoId: "photo-1" }),
+      ]),
+      photos: [{ photoId: "photo-1", sourceArtifactId: "source:original" }],
+    };
+    const replacementRun = {
+      ...run(
+        "run-replace",
+        "2026-11-21T01:00:00Z",
+        [
+          page("replace-page-1", {
+            replacesPageId: "page-1",
+            photoId: "photo-2",
+            state: "created",
+          }),
+        ],
+        "photo_replacement"
+      ),
+      photos: [{ photoId: "photo-2", sourceArtifactId: "source:replacement" }],
+    };
+    const result = reconcilePageSlots({
+      primaryRun,
+      otherRuns: [replacementRun],
+    });
+    expect(result.slots[0]).toMatchObject({
+      currentRunId: "run-replace",
+      sourceArtifactId: "source:replacement",
+    });
   });
 
   it("resolves a slot to its regeneration run", () => {
