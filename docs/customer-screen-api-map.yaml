@@ -298,17 +298,22 @@ screens:
   - id: preview
     title: Preview the book
     route: /books/new/preview
-    component: apps/web/screens/BookPreviewScreen.jsx
-    reactStatus: disconnected
+    component: apps/web/pages/book-preview-page.jsx
+    reactStatus: connected
     reads:
       - operationId: getBookRun
-        hook: useBookRunQuery
+        hook: useBookPages
+        when: Load the primary run's pages, resolved to each slot's current page, the same reconciliation the review screen uses.
+      - operationId: listBookRuns
+        hook: useBookPages
+        when: Discover regeneration/photo-replacement runs and resolve each page slot's current pointer.
       - operationId: getArtifactAccess
-        hook: useArtifactAccessQuery
-        when: Load private page images or final book export.
+        hook: useArtifactAccess
+        when: Request a short-lived, authenticated image URL for each spread page's approved candidate.
     actions:
       - event: Choose an edition
-        operationId: listEditions
+        operationId: none
+        note: "TODO: edition/checkout routes don't exist yet; the navigate target is a placeholder."
         nextScreen: edition
       - event: Back to page review
         operationId: getBookRun

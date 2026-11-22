@@ -13,6 +13,7 @@ import { PhotoSelectionPage } from "./pages/photo-selection-page.jsx";
 import { OrderPagesPage } from "./pages/order-pages-page.jsx";
 import { ProcessingPage } from "./pages/processing-page.jsx";
 import { PageReviewPage } from "./pages/page-review-page.jsx";
+import { BookPreviewPage } from "./pages/book-preview-page.jsx";
 import { AuthLayout, clerkAppearance } from "./auth-layout.jsx";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -159,6 +160,12 @@ const pageReviewRoute = createRoute({
   component: PageReviewPage,
 });
 
+const bookPreviewRoute = createRoute({
+  getParentRoute: () => authedLayout,
+  path: "/books/new/preview",
+  component: BookPreviewPage,
+});
+
 // ── Router ─────────────────────────────────────────────────────────────
 
 const router = createRouter({
@@ -174,6 +181,7 @@ const router = createRouter({
       bookOrderRoute,
       bookCreatingRoute,
       pageReviewRoute,
+      bookPreviewRoute,
     ]),
   ]),
 });
