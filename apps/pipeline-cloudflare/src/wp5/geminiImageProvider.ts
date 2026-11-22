@@ -33,6 +33,23 @@ export type GeminiStyleEvaluation = {
   correctionPrompt: string;
 };
 
+export type GeminiPhotoIntakeReason =
+  | "too_blurry"
+  | "too_dark"
+  | "too_cluttered"
+  | "face_occluded"
+  | "too_many_subjects"
+  | "unsafe_content"
+  | "low_resolution"
+  | "no_clear_subject"
+  | "generation_unsuitable";
+
+export type GeminiPhotoIntakeResult = {
+  status: "accepted" | "rejected" | "needs_review";
+  reasons: GeminiPhotoIntakeReason[];
+  message: string;
+};
+
 export class GeminiProviderError extends Error {
   constructor(
     message: string,
@@ -273,6 +290,97 @@ export const judgeGeminiStyle = async (input: {
       typeof parsed.correctionPrompt === "string"
         ? parsed.correctionPrompt.slice(0, 2_000)
         : "",
+  };
+};
+
+const PHOTO_INTAKE_REASONS = new Set<GeminiPhotoIntakeReason>([
+  "too_blurry",
+  "too_dark",
+  "too_cluttered",
+  "face_occluded",
+  "too_many_subjects",
+  "unsafe_content",
+  "low_resolution",
+  "no_clear_subject",
+  "generation_unsuitable",
+]);
+
+export const analyzeGeminiPhotoIntake = async (input: {
+  apiKey: string;
+  model: string;
+  photo: GeminiImagePart;
+}): Promise<GeminiPhotoIntakeResult> => {
+  if (input.photo.bytes.byteLength > MAX_IMAGE_BYTES) {
+    throw new GeminiProviderError(
+      "Source photo exceeds the 12 MiB inline image limit",
+      false
+    );
+  }
+  const parts: Array<Record<string, unknown>> = [
+    {
+      text: [
+        "Decide whether this family photo can be used as the source for a simple black-and-white preschool coloring-book page.",
+        'Return only a JSON object: {"status": "accepted" | "rejected" | "needs_review", "reasons": string[], "message": "short parent-friendly explanation"}.',
+        "Valid reasons: too_blurry, too_dark, too_cluttered, face_occluded, too_many_subjects, unsafe_content, low_resolution, no_clear_subject, generation_unsuitable.",
+        "Accept clear, safe photos with one or more recognizable main subjects. Use needs_review for borderline quality. Use rejected only when the photo cannot reasonably be converted. Never identify people or infer names, ethnicity, health, religion, or other sensitive traits.",
+      ].join("\n\n"),
+    },
+    {
+      inline_data: {
+        mime_type: input.photo.mimeType,
+        data: toBase64(new Uint8Array(input.photo.bytes)),
+      },
+    },
+  ];
+  const response = await requestGemini(input.apiKey, input.model, {
+    contents: [{ role: "user", parts }],
+    generationConfig: {
+      responseModalities: ["TEXT"],
+      responseMimeType: "application/json",
+    },
+  });
+  const payload = JSON.parse(new TextDecoder().decode(response.body)) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+  const text = payload.candidates
+    ?.flatMap(candidate => candidate.content?.parts ?? [])
+    .map(part => part.text)
+    .find((value): value is string => Boolean(value));
+  if (!text)
+    throw new GeminiProviderError(
+      "Gemini photo intake check returned no evaluation",
+      true
+    );
+  let parsed: { status?: string; reasons?: unknown; message?: string };
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new GeminiProviderError(
+      "Gemini photo intake check returned invalid JSON",
+      true
+    );
+  }
+  const status: GeminiPhotoIntakeResult["status"] =
+    parsed.status === "rejected" || parsed.status === "needs_review"
+      ? parsed.status
+      : "accepted";
+  const reasons = Array.isArray(parsed.reasons)
+    ? parsed.reasons.filter((value): value is GeminiPhotoIntakeReason =>
+        PHOTO_INTAKE_REASONS.has(value as GeminiPhotoIntakeReason)
+      )
+    : [];
+  return {
+    status,
+    reasons:
+      status === "accepted"
+        ? []
+        : reasons.length > 0
+          ? reasons
+          : ["generation_unsuitable"],
+    message:
+      typeof parsed.message === "string"
+        ? parsed.message.slice(0, 400)
+        : "This photo needs a closer review.",
   };
 };
 

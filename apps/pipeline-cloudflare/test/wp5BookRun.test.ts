@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { applyD1Migrations, reset, type D1Migration } from "cloudflare:test";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ProductionBookRun,
   type ImageArtifactResult,
@@ -10,6 +10,8 @@ import {
 } from "../src/wp5/bookRun.js";
 import { createSyntheticBookRun } from "../src/wp5/syntheticBookRun.js";
 import { LocalMockImageProcessor } from "../src/wp5/localMockImageProcessor.js";
+import { R2ArtifactStore } from "../src/storage/r2ArtifactStore.js";
+import { objectKeys } from "../src/domain/objectKeys.js";
 
 class ImmediateSteps implements WorkflowSteps {
   readonly names: string[] = [];
@@ -245,7 +247,215 @@ describe("WP5 ProductionBookRun", () => {
       )
     ).toBe(1);
   });
+
+  describe("Gemini photo intake analysis", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("stops a page at intake_rejected when Gemini rejects the source photo and never starts generation", async () => {
+      const { runId } = await createGeminiBookRun("intake-reject");
+      stubGeminiIntakeFetch({
+        status: "rejected",
+        reasons: ["too_dark"],
+        message: "This photo is too dark to use.",
+      });
+      const pipeline = new ProductionBookRun(
+        env.PIPELINE_DB,
+        env.PIPELINE_ARTIFACTS,
+        new FakeImageProcessor(),
+        () => "2026-11-10T12:00:00.000Z",
+        { apiKey: "test-gemini-key" }
+      );
+
+      const result = await pipeline.run(runId, new ImmediateSteps());
+
+      expect(result.status).toBe("partially_completed");
+      expect(
+        await scalar(
+          "SELECT count(*) FROM pages WHERE state = 'intake_rejected' AND terminal_reason = 'too_dark'"
+        )
+      ).toBe(1);
+      expect(
+        await scalar(
+          "SELECT count(*) FROM photos WHERE intake_status = 'rejected'"
+        )
+      ).toBe(1);
+      expect(await scalar("SELECT count(*) FROM candidates")).toBe(0);
+      expect(
+        await scalar(
+          "SELECT count(*) FROM operations WHERE operation_kind = 'analyze_photo' AND status = 'completed'"
+        )
+      ).toBe(1);
+
+      // Replaying the run must not re-call Gemini or change the outcome.
+      vi.stubGlobal("fetch", async (): Promise<Response> => {
+        throw new Error("Gemini should not be called again on replay");
+      });
+      const replay = await pipeline.run(runId, new ImmediateSteps());
+      expect(replay.status).toBe("partially_completed");
+      expect(
+        await scalar(
+          "SELECT count(*) FROM operations WHERE operation_kind = 'analyze_photo'"
+        )
+      ).toBe(1);
+    });
+
+    it("stops a page at intake_needs_review when Gemini flags the source photo as borderline", async () => {
+      const { runId } = await createGeminiBookRun("intake-review");
+      stubGeminiIntakeFetch({
+        status: "needs_review",
+        reasons: ["too_cluttered"],
+        message: "This photo has a lot going on in the background.",
+      });
+      const pipeline = new ProductionBookRun(
+        env.PIPELINE_DB,
+        env.PIPELINE_ARTIFACTS,
+        new FakeImageProcessor(),
+        () => "2026-11-10T12:00:00.000Z",
+        { apiKey: "test-gemini-key" }
+      );
+
+      const result = await pipeline.run(runId, new ImmediateSteps());
+
+      expect(result.status).toBe("partially_completed");
+      expect(
+        await scalar(
+          "SELECT count(*) FROM pages WHERE state = 'intake_needs_review' AND terminal_reason = 'too_cluttered'"
+        )
+      ).toBe(1);
+      expect(
+        await scalar(
+          "SELECT count(*) FROM photos WHERE intake_status = 'needs_review'"
+        )
+      ).toBe(1);
+      expect(await scalar("SELECT count(*) FROM candidates")).toBe(0);
+    });
+
+    it("accepts the photo and proceeds to generation when Gemini accepts it", async () => {
+      const { runId } = await createGeminiBookRun("intake-accept");
+      stubGeminiIntakeFetch({ status: "accepted", reasons: [], message: "" });
+      const pipeline = new ProductionBookRun(
+        env.PIPELINE_DB,
+        env.PIPELINE_ARTIFACTS,
+        new FakeImageProcessor(),
+        () => "2026-11-10T12:00:00.000Z",
+        { apiKey: "test-gemini-key" }
+      );
+
+      // Generation itself requires a real Gemini image-generation response,
+      // which this test does not stub; it only asserts the page cleared the
+      // intake gate rather than asserting full completion.
+      await expect(pipeline.run(runId, new ImmediateSteps())).rejects.toThrow();
+
+      expect(
+        await scalar(
+          "SELECT count(*) FROM photos WHERE intake_status = 'accepted'"
+        )
+      ).toBe(1);
+      expect(
+        await scalar("SELECT count(*) FROM pages WHERE state = 'generating'")
+      ).toBe(1);
+    });
+  });
 });
+
+const createGeminiBookRun = async (suffix: string) => {
+  const bookId = `book-${suffix}-${crypto.randomUUID()}`;
+  const runId = `run-${suffix}-${crypto.randomUUID()}`;
+  const photoId = `photo-${suffix}`;
+  const pageId = `page-${suffix}`;
+  const sourceArtifactId = `source:${photoId}`;
+  const now = "2026-11-10T12:00:00.000Z";
+  const stylePackVersion = "pictobook-preschool-v0.1";
+
+  await env.PIPELINE_DB.batch([
+    env.PIPELINE_DB.prepare(
+      `INSERT INTO books (book_id, owner_id, status, created_at, updated_at)
+       VALUES (?, 'test-owner', 'draft', ?, ?)`
+    ).bind(bookId, now, now),
+    env.PIPELINE_DB.prepare(
+      `INSERT INTO book_runs
+       (run_id, book_id, status, style_pack_version, cost_ceiling_micros,
+        cost_spent_micros, created_at, updated_at, completed_at)
+       VALUES (?, ?, 'created', ?, 7000, 0, ?, ?, NULL)`
+    ).bind(runId, bookId, stylePackVersion, now, now),
+    env.PIPELINE_DB.prepare(
+      `INSERT INTO book_run_execution_configs
+       (run_id, provider, model, style_judge_model, execution_profile,
+        candidate_cost_micros, style_judge_cost_micros, initial_candidate_count, created_at)
+       VALUES (?, 'gemini', 'gemini-test-model', 'gemini-test-model', 'mock_pass_initial', 1000, 500, 1, ?)`
+    ).bind(runId, now),
+    env.PIPELINE_DB.prepare(
+      `INSERT INTO photos (photo_id, run_id, ordinal, source_artifact_id, intake_status, created_at)
+       VALUES (?, ?, 1, NULL, 'pending', ?)`
+    ).bind(photoId, runId, now),
+    env.PIPELINE_DB.prepare(
+      `INSERT INTO pages
+       (page_id, run_id, photo_id, state, initial_candidate_count,
+        repair_round_count, approved_candidate_id, approval_source,
+        terminal_reason, created_at, updated_at)
+       VALUES (?, ?, ?, 'created', 0, 0, NULL, NULL, NULL, ?, ?)`
+    ).bind(pageId, runId, photoId, now, now),
+  ]);
+
+  const artifacts = new R2ArtifactStore(
+    env.PIPELINE_ARTIFACTS,
+    env.PIPELINE_DB
+  );
+  await artifacts.putImmutable({
+    artifactId: sourceArtifactId,
+    runId,
+    pageId,
+    objectKey: objectKeys.sourcePhoto({
+      bookId,
+      runId,
+      photoId,
+      revision: "v1.jpg",
+    }),
+    artifactKind: "source_photo",
+    schemaVersion: "2026-11-10",
+    body: new TextEncoder().encode("fake source photo bytes"),
+    mimeType: "image/jpeg",
+    provider: "upload",
+    model: "none",
+    retentionClass: "source",
+    createdAt: now,
+  });
+  await env.PIPELINE_DB.prepare(
+    "UPDATE photos SET source_artifact_id = ? WHERE photo_id = ?"
+  )
+    .bind(sourceArtifactId, photoId)
+    .run();
+
+  await env.PIPELINE_ARTIFACTS.put(
+    objectKeys.styleBible(stylePackVersion),
+    "# Pictobook Preschool Style Bible\n\nKeep lines clean and simple."
+  );
+
+  return { bookId, runId, photoId, pageId };
+};
+
+const stubGeminiIntakeFetch = (result: {
+  status: "accepted" | "rejected" | "needs_review";
+  reasons: string[];
+  message: string;
+}) => {
+  vi.stubGlobal("fetch", async (): Promise<Response> => {
+    return new Response(
+      JSON.stringify({
+        candidates: [
+          {
+            content: {
+              parts: [{ text: JSON.stringify(result) }],
+            },
+          },
+        ],
+      }),
+      { headers: { "content-type": "application/json" } }
+    );
+  });
+};
 
 const scalar = async (query: string): Promise<number> => {
   const row =

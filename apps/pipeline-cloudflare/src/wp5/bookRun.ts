@@ -12,6 +12,7 @@ import {
 } from "../domain/generationPolicy.js";
 import { R2ArtifactStore } from "../storage/r2ArtifactStore.js";
 import {
+  analyzeGeminiPhotoIntake,
   generateGeminiImage,
   judgeGeminiStyle,
   type GeminiImagePart,
@@ -120,7 +121,16 @@ export class ProductionBookRun {
     );
 
     for (const page of pages) {
-      await steps.do(`analyze ${page.page_id}`, () => this.acceptPage(page));
+      await steps.do(
+        `analyze ${page.page_id}`,
+        {
+          retries: { limit: 3, delay: "2 seconds", backoff: "exponential" },
+          timeout: "3 minutes",
+        },
+        () => this.acceptPage(context, page)
+      );
+      const afterIntake = await this.getPage(page.page_id);
+      if (isTerminal(afterIntake.state)) continue;
       await steps.do(
         `normalize source ${page.page_id}`,
         {
@@ -275,28 +285,108 @@ export class ProductionBookRun {
     return result.results;
   }
 
-  private async acceptPage(page: PageContext): Promise<void> {
+  private async acceptPage(run: RunContext, page: PageContext): Promise<void> {
     const current = await this.getPage(page.page_id);
     if (current.state !== "created") return;
-    const now = this.now();
+    await this.database
+      .prepare(
+        "UPDATE pages SET state = 'analyzing', updated_at = ? WHERE page_id = ? AND state = 'created'"
+      )
+      .bind(this.now(), page.page_id)
+      .run();
+
+    const intake = await this.analyzePhotoIntake(run, page);
+    if (intake.status !== "accepted") {
+      await this.database.batch([
+        this.database
+          .prepare(
+            `UPDATE pages SET state = ?, terminal_reason = ?, updated_at = ?
+             WHERE page_id = ? AND state = 'analyzing'`
+          )
+          .bind(
+            intake.status === "rejected"
+              ? "intake_rejected"
+              : "intake_needs_review",
+            intake.reason,
+            this.now(),
+            page.page_id
+          ),
+        this.database
+          .prepare("UPDATE photos SET intake_status = ? WHERE photo_id = ?")
+          .bind(intake.status, page.photo_id),
+      ]);
+      return;
+    }
+
     await this.database.batch([
       this.database
         .prepare(
-          "UPDATE pages SET state = 'analyzing', updated_at = ? WHERE page_id = ? AND state = 'created'"
+          "UPDATE pages SET state = 'generating', updated_at = ? WHERE page_id = ? AND state = 'analyzing'"
         )
-        .bind(now, page.page_id),
+        .bind(this.now(), page.page_id),
       this.database
         .prepare(
           "UPDATE photos SET intake_status = 'accepted' WHERE photo_id = ?"
         )
         .bind(page.photo_id),
     ]);
-    await this.database
-      .prepare(
-        "UPDATE pages SET state = 'generating', updated_at = ? WHERE page_id = ? AND state = 'analyzing'"
-      )
-      .bind(now, page.page_id)
-      .run();
+  }
+
+  private async analyzePhotoIntake(
+    run: RunContext,
+    page: PageContext
+  ): Promise<{
+    status: "accepted" | "rejected" | "needs_review";
+    reason: string | null;
+  }> {
+    if (run.provider !== "gemini") {
+      return { status: "accepted", reason: null };
+    }
+    const operationId = `analyze:${page.page_id}`;
+    const existing = await this.completedOperation<{
+      status: "accepted" | "rejected" | "needs_review";
+      reason: string | null;
+    }>(operationId);
+    if (existing) return existing;
+
+    if (!this.providerConfig.apiKey) {
+      throw new Error(
+        "GEMINI_API_KEY secret is required for photo intake analysis"
+      );
+    }
+    const now = this.now();
+    await this.claimOperation(
+      operationId,
+      run.run_id,
+      page.page_id,
+      "analyze_photo",
+      0,
+      now
+    );
+    const photo = await this.database
+      .prepare("SELECT source_artifact_id FROM photos WHERE photo_id = ?")
+      .bind(page.photo_id)
+      .first<{ source_artifact_id: string | null }>();
+    if (!photo?.source_artifact_id)
+      throw new Error(`Source photo for ${page.page_id} is missing`);
+    const source = await this.artifacts.read(photo.source_artifact_id);
+    const bytes = await source.object.arrayBuffer();
+
+    const analysis = await analyzeGeminiPhotoIntake({
+      apiKey: this.providerConfig.apiKey,
+      model: run.model,
+      photo: { mimeType: source.record.mime_type, bytes },
+    });
+    const outcome = {
+      status: analysis.status,
+      reason: analysis.reasons[0] ?? null,
+    };
+    await this.completeOperationStatement(
+      operationId,
+      outcome,
+      this.now()
+    ).run();
+    return outcome;
   }
 
   private async generateRound(
@@ -1191,7 +1281,7 @@ export class ProductionBookRun {
     operationId: string,
     runId: string,
     pageId: string,
-    kind: "normalize" | "print_qa" | "style_qa",
+    kind: "analyze_photo" | "normalize" | "print_qa" | "style_qa",
     semanticAttempt: number,
     now: string
   ): Promise<void> {
