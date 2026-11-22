@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useApiClient } from "../api-client.js";
+import { useNavigate } from "@tanstack/react-router";
+import { useApiClient, UnauthorizedError } from "../api-client.js";
 
 /**
  * getArtifactAccess returns a signed URL that still requires the Bearer
@@ -10,19 +11,30 @@ import { useApiClient } from "../api-client.js";
  * aren't explicitly revoked (that would need an unmount effect this hook
  * deliberately doesn't have) — the browser reclaims them on navigation,
  * and a single review screen only ever holds a handful at once.
+ * Redirects to /sign-in on 401, same as the other data-fetching hooks.
  */
 export function useArtifactAccess(artifactId) {
   const api = useApiClient();
+  const navigate = useNavigate();
+
   const query = useQuery({
     queryKey: ["artifact-access", artifactId],
     queryFn: async () => {
-      const { access } = await api.getArtifactAccess(artifactId);
-      const response = await fetch(access.url, {
-        method: access.method,
-        headers: access.headers,
-      });
-      const blob = await response.blob();
-      return URL.createObjectURL(blob);
+      try {
+        const { access } = await api.getArtifactAccess(artifactId);
+        const response = await fetch(access.url, {
+          method: access.method,
+          headers: access.headers,
+        });
+        const blob = await response.blob();
+        return URL.createObjectURL(blob);
+      } catch (err) {
+        if (err instanceof UnauthorizedError) {
+          navigate({ to: "/sign-in" });
+          return null;
+        }
+        throw err;
+      }
     },
     enabled: Boolean(artifactId),
     staleTime: Infinity,
