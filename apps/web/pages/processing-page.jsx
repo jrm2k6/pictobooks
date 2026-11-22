@@ -22,7 +22,7 @@ export function ProcessingPage() {
   useEffect(() => {
     if (!run) return;
     if (TERMINAL_COMPLETE.has(run.status)) {
-      navigate({ to: "/books" });
+      navigate({ to: "/books/new/pages", search: { bookId, runId } });
     }
   }, [run?.status]);
 

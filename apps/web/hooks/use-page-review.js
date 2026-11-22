@@ -47,6 +47,12 @@ export function usePageReview(bookId, primaryRunId) {
   const tryAgainMutation = useMutation({
     mutationFn: async pageId => {
       const slot = slots.find(s => s.currentPageId === pageId);
+      if (slot.currentPage.state === "rejected") {
+        // The paired reviewCandidate(rejected) call already went through on a
+        // previous attempt; reviewCandidate is one-way, so only retry the
+        // regeneratePage half.
+        return api.regeneratePage(bookId, pageId);
+      }
       // Only reject-then-regenerate when the page was actually flagged by QA
       // and hasn't been rejected yet; a plain "approved" page or an already-
       // rejected page (regenerate-only retry) skips the reviewCandidate call.

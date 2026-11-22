@@ -27,7 +27,9 @@ operationStatus:
     reactClient: disconnected
   listBookRuns:
     worker: implemented
-    reactClient: disconnected
+    reactClient: connected
+    hook: useBookPages (apps/web/hooks/use-book-pages.js)
+    details: Used to discover regeneration/photo-replacement runs beyond the primary run, for page-slot reconciliation.
   createBookRun:
     worker: implemented
     reactClient: connected
@@ -52,13 +54,21 @@ operationStatus:
     details: Called from OrderPagesPage before startBookRun; idempotency is handled by the API layer.
   reviewCandidate:
     worker: implemented
-    reactClient: disconnected
+    reactClient: connected
+    hook: usePageReview (apps/web/hooks/use-page-review.js)
   regeneratePage:
     worker: implemented
-    reactClient: disconnected
+    reactClient: connected
+    hook: usePageReview (apps/web/hooks/use-page-review.js)
+  createPhotoReplacement:
+    worker: implemented
+    reactClient: connected
+    hook: usePageReview (apps/web/hooks/use-page-review.js)
+    details: Returns an upload intent for the new photo; the existing uploadPhoto + startBookRun sequence completes it.
   getArtifactAccess:
     worker: implemented
-    reactClient: disconnected
+    reactClient: connected
+    hook: useArtifactAccess (apps/web/hooks/use-artifact-access.js)
   listEditions:
     worker: implemented
     reactClient: disconnected
@@ -248,55 +258,41 @@ screens:
         nextScreen: review
       - event: Page needs a retry
         operationId: getBookRun
-        note: Read the page state first; the customer chooses retry from the attention screen.
-        nextScreen: issue
+        note: Read the page state first; the customer chooses retry from the review screen.
+        nextScreen: review
 
   - id: review
-    title: Review a page
-    route: /books/new/pages/review
-    component: apps/web/screens/PageReviewScreen.jsx
-    reactStatus: disconnected
+    title: Review your pages
+    route: /books/new/pages
+    component: apps/web/pages/page-review-page.jsx
+    reactStatus: connected
     reads:
       - operationId: getBookRun
-        hook: useBookRunQuery
-        when: Load exact candidate IDs, QA outcomes, and review state.
+        hook: usePageReview (via useBookPages)
+        when: Load the primary run's pages, and poll each in-flight regeneration/replacement run while it's still generating.
+      - operationId: listBookRuns
+        hook: usePageReview (via useBookPages)
+        when: On route entry and after every mutation, to discover regeneration/photo-replacement runs and resolve each page slot's current pointer — including surviving a reload mid-review.
       - operationId: getArtifactAccess
-        hook: useArtifactAccessQuery
-        when: Request short-lived access for the selected candidate image.
+        hook: useArtifactAccess
+        when: Request a short-lived, authenticated image URL for each grid thumbnail and for the open detail view's candidate/source images.
     actions:
       - event: Keep page
         operationId: reviewCandidate
-        mutationHook: useReviewCandidateMutation
-        nextScreen: preview
-      - event: Request another version
-        operationId: reviewCandidate
-        mutationHook: useReviewCandidateMutation
-        decision: changes_requested
-        note: Save optional correction notes here so the later regeneration can include reviewer feedback; the current prototype does not collect this note yet.
-        nextScreen: issue
-      - event: Preview the book
-        operationId: getBookRun
-        nextScreen: preview
-
-  - id: issue
-    title: A page needs attention
-    route: /books/new/pages/needs-attention
-    component: apps/web/screens/PageReviewScreen.jsx
-    reactStatus: disconnected
-    reads:
-      - operationId: getBookRun
-        hook: useBookRunQuery
-      - operationId: getArtifactAccess
-        hook: useArtifactAccessQuery
-    actions:
-      - event: Retry this page
+        mutationHook: usePageReview().keepPage
+        decision: approved
+        when: Page state is approved (auto-passed QA) or needs_human_review ("Use this page anyway").
+      - event: Try another version / Try again
         operationId: regeneratePage
-        mutationHook: useRegeneratePageMutation
-        note: New run is derived from the original source and includes judge findings and reviewer notes.
-        nextScreen: processing
-      - event: Keep current page
-        operationId: none
-        note: This prototype action only moves to preview; production approval semantics need a distinct customer decision if this is intended to approve the candidate.
+        mutationHook: usePageReview().tryAgain
+        note: For a needs_human_review page, reviewCandidate(rejected) is called first so the reject decision is never left unresolved; for an approved, already-rejected, provider_failed, or budget_exhausted page, regeneratePage is called directly. Disabled (replaced by a contact-support link) once the book's 3-regeneration cap is reached.
+      - event: Upload a different photo
+        operationId: createPhotoReplacement
+        mutationHook: usePageReview().replacePhoto
+        note: Shown only for intake_rejected/intake_needs_review pages (the source photo itself was unusable, so there is no candidate to keep). Followed by the existing uploadPhoto + startBookRun sequence. Disabled (replaced by a contact-support link) once the book's separate 3-replacement cap is reached.
+      - event: Continue
+        operationId: getBookRun
+        note: Enabled only once every page slot resolves to approved (canContinue).
         nextScreen: preview
 
   - id: preview
@@ -399,8 +395,8 @@ screens:
     actions:
       - event: Retry page
         operationId: none
-        note: This moves to the needs-attention screen; the retry mutation is started from that screen.
-        nextScreen: issue
+        note: This moves to the review screen; the retry mutation is started from that screen.
+        nextScreen: review
       - event: Return to book
         operationId: listBooks
         nextScreen: library
