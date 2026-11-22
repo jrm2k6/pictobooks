@@ -566,6 +566,13 @@ export class PipelineApi {
     );
     if (!statusData) throw new ApiProblem(404, "run_not_found");
 
+    const lineage = await this.database
+      .prepare(
+        `SELECT kind, source_page_id FROM book_run_regenerations WHERE new_run_id = ?`
+      )
+      .bind(runId)
+      .first<{ kind: string; source_page_id: string }>();
+
     const [photosResult, artifactsResult] = await Promise.all([
       this.database
         .prepare("SELECT * FROM photos WHERE run_id = ? ORDER BY ordinal")
@@ -624,6 +631,7 @@ export class PipelineApi {
         state: page["state"],
         approvedCandidateId:
           (page["approved_candidate_id"] as string | null) ?? null,
+        replacesPageId: lineage?.source_page_id ?? null,
         candidates: pageCandidates,
       };
     });
@@ -637,6 +645,7 @@ export class PipelineApi {
         stylePackVersion: run["style_pack_version"],
         createdAt: run["created_at"],
         completedAt: (run["completed_at"] as string | null) ?? null,
+        regenerationKind: lineage?.kind ?? null,
         readyPageCount,
         totalPageCount: pages.length,
         pages: mappedPages,

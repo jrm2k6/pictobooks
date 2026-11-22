@@ -829,6 +829,48 @@ describe("WP6 authenticated pipeline API", () => {
     ).toBe(1);
   });
 
+  it("exposes replacesPageId and regenerationKind for a regeneration run, and null for the primary run", async () => {
+    const seeded = await seedReviewablePage();
+    await api.reviewCandidate(
+      owner,
+      "approve-for-lineage-001",
+      seeded.bookId,
+      seeded.pageId,
+      {
+        candidateId: seeded.candidateId,
+        decision: "approved",
+      }
+    );
+    const regenerated = await api.regeneratePage(
+      owner,
+      "regen-for-lineage-001",
+      seeded.bookId,
+      seeded.pageId
+    );
+    const newRunView = await api.getBookRun(
+      owner,
+      seeded.bookId,
+      String(regenerated.body.runId)
+    );
+    expect(newRunView.body.regenerationKind).toBe("candidate_regeneration");
+    expect(
+      (newRunView.body.pages as Array<{ replacesPageId: string | null }>)[0]!
+        .replacesPageId
+    ).toBe(seeded.pageId);
+
+    const primaryView = await api.getBookRun(
+      owner,
+      seeded.bookId,
+      seeded.runId
+    );
+    expect(primaryView.body.regenerationKind).toBeNull();
+    expect(
+      (
+        primaryView.body.pages as Array<{ replacesPageId: string | null }>
+      ).every(page => page.replacesPageId === null)
+    ).toBe(true);
+  });
+
   it("rejects a reviewable page with an exact Candidate revision", async () => {
     const seeded = await seedReviewablePage();
     const rejected = await api.reviewCandidate(
