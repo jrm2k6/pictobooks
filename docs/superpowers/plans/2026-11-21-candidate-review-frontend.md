@@ -28,6 +28,7 @@
 - `canContinue` must be `false` whenever _any_ slot's current page isn't `approved` — written as a positive predicate ("every slot resolves to approved"), not a list of which states are excluded, per the design doc's explicit correction on this point.
 - Hitting the regeneration cap must disable "Try again" everywhere but leave "Upload a different photo" untouched, and vice versa for the replacement cap — they're independent, and a wrong guess here silently merges two budgets the design doc deliberately split.
 - The `replacePhoto` three-step sequence (`createPhotoReplacement` → `uploadPhoto` → `startBookRun`) must not call `startBookRun` if the upload itself fails — a half-done sequence must surface as a retryable error, not silently leave an orphaned run the UI never polls.
+- An abandoned photo-replacement upload (`uploadExpired: true` on its run) must not strand a slot or count against the cap client-side — found during the backend plan's final review, fixed there, and must be mirrored here by `reconcilePageSlots` filtering those runs out entirely before resolving slots or counting `replacementsUsed`.
 
 ---
 
@@ -42,7 +43,7 @@
 
 **Interfaces:**
 
-- Produces: `reconcilePageSlots({ primaryRun, otherRuns }): { slots: PageSlot[], regenerationsUsed: number, replacementsUsed: number }`, where `PageSlot = { originalPageId: string, currentRunId: string, currentPageId: string, currentPage: object }`. `primaryRun` and each entry of `otherRuns` are `getBookRun` response bodies (shape: `{ runId, createdAt, regenerationKind, pages: [{ pageId, state, replacesPageId, ... }], ... }`, per the backend plan's Task 4). Tasks 3 and 4 consume this signature unchanged.
+- Produces: `reconcilePageSlots({ primaryRun, otherRuns }): { slots: PageSlot[], regenerationsUsed: number, replacementsUsed: number }`, where `PageSlot = { originalPageId: string, currentRunId: string, currentPageId: string, currentPage: object }`. `primaryRun` and each entry of `otherRuns` are `getBookRun` response bodies (shape: `{ runId, createdAt, regenerationKind, uploadExpired, pages: [{ pageId, state, replacesPageId, ... }], ... }` — `uploadExpired` added by the backend plan's post-review fix wave: true when a photo-replacement's upload never completed and its window expired; `reconcilePageSlots` must filter these out entirely, both from slot resolution and from the used-counts, per the ruling below). Tasks 3 and 4 consume this signature unchanged.
 - Produces: `canContinueReview(slots: PageSlot[]): boolean`, defined as "every slot's `currentPage.state` is `approved`" — written positively, not as a list of excluded states, per the design doc's explicit correction. Task 4 consumes this unchanged.
 
 - [ ] **Step 1: Add vitest**
@@ -206,6 +207,33 @@ describe("reconcilePageSlots", () => {
     });
     expect(result.slots[0].currentRunId).toBe("run-later");
   });
+
+  it("skips a run whose upload expired without completing, resolving to the next-best candidate instead", () => {
+    const primaryRun = run("run-primary", "2026-11-21T00:00:00Z", [
+      page("page-1"),
+    ]);
+    const abandoned = {
+      ...run(
+        "run-abandoned",
+        "2026-11-21T02:00:00Z",
+        [page("abandoned-page-1", { replacesPageId: "page-1" })],
+        "photo_replacement"
+      ),
+      uploadExpired: true,
+    };
+    const result = reconcilePageSlots({ primaryRun, otherRuns: [abandoned] });
+    // Falls all the way back to the primary page — there was no earlier
+    // live replacement to fall back to.
+    expect(result.slots[0]).toMatchObject({
+      originalPageId: "page-1",
+      currentRunId: "run-primary",
+      currentPageId: "page-1",
+    });
+    // An abandoned run must not count against the cap either — the backend
+    // already excludes it from countRegenerations, so the client's count
+    // has to match or the "X of 3 used" banner would lie.
+    expect(result.replacementsUsed).toBe(0);
+  });
 });
 
 describe("canContinueReview", () => {
@@ -231,10 +259,14 @@ Expected: FAIL — `Cannot find module './reconcile-page-slots.js'`.
 
 - [ ] **Step 4: Implement `reconcilePageSlots` in `apps/web/hooks/reconcile-page-slots.js`**
 
+**Ruling added after the backend plan's final review:** `getBookRun` now returns an `uploadExpired` boolean per run — true when a photo-replacement's upload never completed and its 15-minute window has passed. The backend already excludes such a run from the replacement cap count (`countRegenerations`), so the client must treat it the same way: as if it doesn't exist, falling back to the next-best candidate for that slot, rather than resolving to a dead end or double-counting it toward `replacementsUsed`. Filter it out before anything else runs:
+
 ```js
 export function reconcilePageSlots({ primaryRun, otherRuns }) {
+  const liveRuns = otherRuns.filter(run => !run.uploadExpired);
+
   const byTarget = new Map();
-  for (const run of otherRuns) {
+  for (const run of liveRuns) {
     const page = run.pages[0];
     if (!page?.replacesPageId) continue;
     const list = byTarget.get(page.replacesPageId) ?? [];
@@ -271,10 +303,10 @@ export function reconcilePageSlots({ primaryRun, otherRuns }) {
 
   return {
     slots,
-    regenerationsUsed: otherRuns.filter(
+    regenerationsUsed: liveRuns.filter(
       r => r.regenerationKind === "candidate_regeneration"
     ).length,
-    replacementsUsed: otherRuns.filter(
+    replacementsUsed: liveRuns.filter(
       r => r.regenerationKind === "photo_replacement"
     ).length,
   };
