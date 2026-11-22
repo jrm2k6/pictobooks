@@ -613,12 +613,96 @@ paths:
                     type: string
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >-
+            The customer's regeneration cap for this book has been reached
+            (3 per book per customer).
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      code:
+                        const: regeneration_limit_reached
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/Unavailable"
+  /v1/books/{bookId}/pages/{pageId}/photo-replacements:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+      - $ref: "#/components/parameters/PageId"
+    post:
+      tags: [Review]
+      operationId: createPhotoReplacement
+      summary: >-
+        Start a bounded new run from a freshly uploaded photo, replacing an
+        intake-rejected or intake-needs-review page
+      description: >-
+        Customer transition: `issue` → `upload` → `processing`. Unlike
+        `regeneratePage`, which reuses the existing source artifact, this
+        creates a new upload intent for a replacement photo because the
+        original photo itself was rejected at intake. The original page is
+        left unchanged; it remains the book's current page for that slot
+        until the replacement run completes.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PhotoUploadInput"
+      responses:
+        "201":
+          description: Replacement run and short-lived R2 PUT URL created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bookId, runId, pageId, sourcePageId, upload]
+                properties:
+                  bookId:
+                    type: string
+                  runId:
+                    type: string
+                  pageId:
+                    type: string
+                  sourcePageId:
+                    type: string
+                  upload:
+                    $ref: "#/components/schemas/UploadIntent"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >-
+            The customer's photo-replacement cap for this book has been
+            reached (3 per book per customer).
+          content:
+            application/problem+json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Problem"
+                  - type: object
+                    properties:
+                      code:
+                        const: photo_replacement_limit_reached
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >-
+            The page is not in a replaceable state (not
+            `intake_rejected` or `intake_needs_review`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /v1/artifacts/{artifactId}/access:
     parameters:
       - name: artifactId
@@ -981,12 +1065,28 @@ components:
       allOf:
         - $ref: "#/components/schemas/RunSummary"
         - type: object
-          required: [bookId, pages]
+          required: [bookId, pages, regenerationKind, uploadExpired]
           properties:
             bookId:
               type: string
             stylePackVersion:
               type: string
+            regenerationKind:
+              type: [string, "null"]
+              enum: [candidate_regeneration, photo_replacement, null]
+              description: >-
+                Null for a primary run. Set when this run was created by
+                `regeneratePage` (`candidate_regeneration`) or
+                `createPhotoReplacement` (`photo_replacement`).
+            uploadExpired:
+              type: boolean
+              description: >-
+                True when at least one of this run's required photo uploads
+                never completed and its upload intent has expired. Such a
+                run is a dead end: `startBookRun` requires every upload
+                intent to be complete, so it can never launch. A client
+                resolving a page slot's current page should skip any run
+                with `uploadExpired: true`.
             pages:
               type: array
               items:
@@ -1001,7 +1101,7 @@ components:
                 $ref: "#/components/schemas/ArtifactSummary"
     Page:
       type: object
-      required: [pageId, photoId, state, candidates]
+      required: [pageId, photoId, state, replacesPageId, candidates]
       properties:
         pageId:
           type: string
@@ -1027,6 +1127,12 @@ components:
             ]
         approvedCandidateId:
           type: [string, "null"]
+        replacesPageId:
+          type: [string, "null"]
+          description: >-
+            Null for a page on a primary run. Set to the source page ID when
+            this page's run was created by `regeneratePage` or
+            `createPhotoReplacement`.
         candidates:
           type: array
           items:

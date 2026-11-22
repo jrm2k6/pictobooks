@@ -566,19 +566,48 @@ export class PipelineApi {
     );
     if (!statusData) throw new ApiProblem(404, "run_not_found");
 
-    const [photosResult, artifactsResult] = await Promise.all([
-      this.database
-        .prepare("SELECT * FROM photos WHERE run_id = ? ORDER BY ordinal")
-        .bind(runId)
-        .all(),
-      this.database
-        .prepare(
-          `SELECT artifact_id, page_id, artifact_kind, mime_type, byte_size, created_at
+    const lineage = await this.database
+      .prepare(
+        `SELECT kind, source_page_id FROM book_run_regenerations WHERE new_run_id = ?`
+      )
+      .bind(runId)
+      .first<{
+        kind: "candidate_regeneration" | "photo_replacement";
+        source_page_id: string;
+      }>();
+
+    const [photosResult, artifactsResult, uploadIntentsResult] =
+      await Promise.all([
+        this.database
+          .prepare("SELECT * FROM photos WHERE run_id = ? ORDER BY ordinal")
+          .bind(runId)
+          .all(),
+        this.database
+          .prepare(
+            `SELECT artifact_id, page_id, artifact_kind, mime_type, byte_size, created_at
            FROM artifacts WHERE run_id = ? AND deleted_at IS NULL ORDER BY created_at`
-        )
-        .bind(runId)
-        .all(),
-    ]);
+          )
+          .bind(runId)
+          .all(),
+        this.database
+          .prepare(
+            `SELECT ui.expires_at AS expires_at, ph.source_artifact_id AS source_artifact_id
+             FROM upload_intents ui
+             JOIN photos ph ON ph.photo_id = ui.photo_id
+             WHERE ui.run_id = ?`
+          )
+          .bind(runId)
+          .all<{ expires_at: string; source_artifact_id: string | null }>(),
+      ]);
+
+    const nowIso = this.isoNow();
+    // A required photo's upload intent expired without ever completing
+    // (closed tab, network drop, the 15-minute window passed). startBookRun
+    // requires every upload intent to be complete before it can launch, so
+    // this run is a dead end once any one of them has expired unresolved.
+    const uploadExpired = uploadIntentsResult.results.some(
+      row => row.source_artifact_id === null && row.expires_at <= nowIso
+    );
 
     const run = statusData.run as Record<string, unknown>;
     const pages = statusData.pages as Array<Record<string, unknown>>;
@@ -624,6 +653,7 @@ export class PipelineApi {
         state: page["state"],
         approvedCandidateId:
           (page["approved_candidate_id"] as string | null) ?? null,
+        replacesPageId: lineage?.source_page_id ?? null,
         candidates: pageCandidates,
       };
     });
@@ -637,6 +667,8 @@ export class PipelineApi {
         stylePackVersion: run["style_pack_version"],
         createdAt: run["created_at"],
         completedAt: (run["completed_at"] as string | null) ?? null,
+        regenerationKind: lineage?.kind ?? null,
+        uploadExpired,
         readyPageCount,
         totalPageCount: pages.length,
         pages: mappedPages,
@@ -784,6 +816,19 @@ export class PipelineApi {
   ): Promise<ApiResponse> {
     return this.mutate(principal, key, `regenerate:${pageId}`, async stable => {
       this.assertGenerationProviderAvailable();
+      // Soft cap: two concurrent requests with different idempotency keys
+      // could both read a count below 3 before either insert, letting the
+      // cap be exceeded by one. Accepted (matches the idempotency-key
+      // limitation elsewhere in this file); not a hard guarantee.
+      if (
+        (await this.countRegenerations(
+          bookId,
+          principal.userId,
+          "candidate_regeneration"
+        )) >= 3
+      ) {
+        throw new ApiProblem(403, "regeneration_limit_reached");
+      }
       const costCeilingMicros =
         requestedCostCeilingMicros ?? this.maximumCostPerPageMicros();
       if (
@@ -874,8 +919,8 @@ export class PipelineApi {
         this.database
           .prepare(
             `INSERT INTO book_run_regenerations
-             (new_run_id, source_run_id, source_page_id, requested_by, created_at, feedback_json)
-             VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(new_run_id) DO NOTHING`
+             (new_run_id, source_run_id, source_page_id, requested_by, created_at, feedback_json, kind)
+             VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(new_run_id) DO NOTHING`
           )
           .bind(
             runId,
@@ -883,7 +928,8 @@ export class PipelineApi {
             pageId,
             principal.userId,
             now,
-            JSON.stringify(feedback)
+            JSON.stringify(feedback),
+            "candidate_regeneration"
           ),
         this.database
           .prepare(
@@ -897,6 +943,222 @@ export class PipelineApi {
         body: { bookId, sourcePageId: pageId, runId, pageId: newPageId },
       };
     });
+  }
+
+  createPhotoReplacement(
+    principal: Principal,
+    key: string,
+    bookId: string,
+    pageId: string,
+    input: PhotoUploadInput
+  ): Promise<ApiResponse> {
+    return this.mutate(
+      principal,
+      key,
+      `photo_replacement:${pageId}`,
+      async stable => {
+        this.assertGenerationProviderAvailable();
+        validatePhotos([input]);
+        // Soft cap: two concurrent requests with different idempotency keys
+        // could both read a count below 3 before either insert, letting the
+        // cap be exceeded by one. Accepted (matches the idempotency-key
+        // limitation elsewhere in this file); not a hard guarantee.
+        if (
+          (await this.countRegenerations(
+            bookId,
+            principal.userId,
+            "photo_replacement"
+          )) >= 3
+        ) {
+          throw new ApiProblem(403, "photo_replacement_limit_reached");
+        }
+        const source = await this.database
+          .prepare(
+            `SELECT p.run_id AS source_run_id, p.state, r.style_pack_version
+             FROM pages p
+             JOIN book_runs r ON r.run_id = p.run_id
+             JOIN books b ON b.book_id = r.book_id
+             WHERE p.page_id = ? AND r.book_id = ? AND b.owner_id = ?`
+          )
+          .bind(pageId, bookId, principal.userId)
+          .first<{
+            source_run_id: string;
+            state: string;
+            style_pack_version: string;
+          }>();
+        if (!source) throw new ApiProblem(404, "page_not_found");
+        if (
+          !["intake_rejected", "intake_needs_review"].includes(source.state)
+        ) {
+          throw new ApiProblem(409, "page_not_replaceable");
+        }
+        const runId = `run-${stable}`;
+        const photoId = `photo-1-${stable}`;
+        const newPageId = `page-1-${stable}`;
+        const artifactId = `source:${photoId}`;
+        const objectKey = objectKeys.sourcePhoto({
+          bookId,
+          runId,
+          photoId,
+          revision: "v1",
+        });
+        const now = this.isoNow();
+        const costCeilingMicros = this.maximumCostPerPageMicros();
+        const intent: UploadIntentRow = {
+          upload_intent_id: `upload-1-${stable}`,
+          book_id: bookId,
+          run_id: runId,
+          photo_id: photoId,
+          artifact_id: artifactId,
+          object_key: objectKey,
+          content_type: input.contentType,
+          byte_size: input.byteSize,
+          sha256: input.sha256,
+          expires_at: new Date(
+            this.now().getTime() + UPLOAD_EXPIRY_SECONDS * 1000
+          ).toISOString(),
+          completed_at: null,
+          created_at: now,
+        };
+        await this.database.batch([
+          this.database
+            .prepare(
+              `INSERT INTO book_runs
+               (run_id, book_id, status, style_pack_version, cost_ceiling_micros,
+                cost_spent_micros, created_at, updated_at, completed_at)
+               VALUES (?, ?, 'created', ?, ?, 0, ?, ?, NULL)
+               ON CONFLICT(run_id) DO NOTHING`
+            )
+            .bind(
+              runId,
+              bookId,
+              source.style_pack_version,
+              costCeilingMicros,
+              now,
+              now
+            ),
+          this.database
+            .prepare(
+              `INSERT INTO book_run_execution_configs
+               (run_id, provider, model, style_judge_model, execution_profile,
+                candidate_cost_micros, style_judge_cost_micros,
+                initial_candidate_count, created_at)
+               VALUES (?, ?, ?, ?, 'mock_pass_after_repair', ?, ?, ?, ?)
+               ON CONFLICT(run_id) DO NOTHING`
+            )
+            .bind(
+              runId,
+              this.generation.provider,
+              this.generation.model,
+              this.generation.styleJudgeModel,
+              this.generation.candidateCostMicros,
+              this.generation.styleJudgeCostMicros,
+              this.generation.initialCandidateCount,
+              now
+            ),
+          this.database
+            .prepare(
+              `INSERT INTO photos
+               (photo_id, run_id, ordinal, source_artifact_id, intake_status, created_at)
+               VALUES (?, ?, 1, NULL, 'pending', ?) ON CONFLICT(photo_id) DO NOTHING`
+            )
+            .bind(photoId, runId, now),
+          this.database
+            .prepare(
+              `INSERT INTO pages
+               (page_id, run_id, photo_id, state, initial_candidate_count,
+                repair_round_count, approved_candidate_id, approval_source,
+                terminal_reason, created_at, updated_at)
+               VALUES (?, ?, ?, 'created', 0, 0, NULL, NULL, NULL, ?, ?)
+               ON CONFLICT(page_id) DO NOTHING`
+            )
+            .bind(newPageId, runId, photoId, now, now),
+          this.database
+            .prepare(
+              `INSERT INTO upload_intents
+               (upload_intent_id, owner_id, book_id, run_id, photo_id, artifact_id,
+                object_key, content_type, byte_size, sha256, expires_at,
+                completed_at, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+               ON CONFLICT(upload_intent_id) DO NOTHING`
+            )
+            .bind(
+              intent.upload_intent_id,
+              principal.userId,
+              bookId,
+              runId,
+              photoId,
+              artifactId,
+              objectKey,
+              input.contentType,
+              input.byteSize,
+              input.sha256,
+              intent.expires_at,
+              now
+            ),
+          this.database
+            .prepare(
+              `INSERT INTO book_run_regenerations
+               (new_run_id, source_run_id, source_page_id, requested_by, created_at, feedback_json, kind)
+               VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(new_run_id) DO NOTHING`
+            )
+            .bind(
+              runId,
+              source.source_run_id,
+              pageId,
+              principal.userId,
+              now,
+              JSON.stringify({}),
+              "photo_replacement"
+            ),
+        ]);
+        const upload = await this.signIntent(intent);
+        return {
+          status: 201,
+          body: {
+            bookId,
+            runId,
+            pageId: newPageId,
+            sourcePageId: pageId,
+            upload,
+          },
+        };
+      }
+    );
+  }
+
+  private async countRegenerations(
+    bookId: string,
+    requestedBy: string,
+    kind: "candidate_regeneration" | "photo_replacement"
+  ): Promise<number> {
+    if (kind === "photo_replacement") {
+      // A photo replacement's upload may never complete (tab closed,
+      // network drop, the 15-minute upload window passes). Don't let an
+      // abandoned, expired replacement permanently count against the cap.
+      const row = await this.database
+        .prepare(
+          `SELECT count(*) AS count FROM book_run_regenerations br
+           JOIN book_runs r ON r.run_id = br.new_run_id
+           JOIN upload_intents ui ON ui.run_id = br.new_run_id
+           WHERE r.book_id = ? AND br.requested_by = ? AND br.kind = ?
+             AND (ui.completed_at IS NOT NULL OR ui.expires_at > ?)`
+        )
+        .bind(bookId, requestedBy, kind, this.isoNow())
+        .first<{ count: number }>();
+      return row?.count ?? 0;
+    }
+    // candidate_regeneration reuses an existing artifact; there is no
+    // upload-window concept to exclude, so count every row as today.
+    const row = await this.database
+      .prepare(
+        `SELECT count(*) AS count FROM book_run_regenerations br
+         JOIN book_runs r ON r.run_id = br.new_run_id
+         WHERE r.book_id = ? AND br.requested_by = ? AND br.kind = ?`
+      )
+      .bind(bookId, requestedBy, kind)
+      .first<{ count: number }>();
+    return row?.count ?? 0;
   }
 
   private assertGenerationProviderAvailable(): void {
