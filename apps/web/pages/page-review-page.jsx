@@ -53,9 +53,12 @@ function displayCandidate(page) {
   return page.candidates.find(c => c.candidateId === candidateId) ?? null;
 }
 
-function statusPillFor(state) {
+function statusPillFor(state, approvalSource) {
   if (ACTIVE_PAGE_STATES.has(state)) {
     return { label: "Making a new version…", tone: styles.pillPending };
+  }
+  if (state === "approved" && approvalSource === "human") {
+    return { label: "Kept", tone: styles.pillReady };
   }
   if (state === "approved") {
     return { label: "Ready to keep", tone: styles.pillReady };
@@ -164,7 +167,7 @@ function PageCard({ slot, onOpen }) {
   const page = slot.currentPage;
   const candidate = displayCandidate(page);
   const { url } = useArtifactAccess(candidate?.artifactId ?? null);
-  const pill = statusPillFor(page.state);
+  const pill = statusPillFor(page.state, page.approvalSource);
 
   return (
     <button

@@ -58,6 +58,10 @@ export function reconcilePageSlots({ primaryRun, otherRuns }) {
 export function canContinueReview(slots) {
   return (
     slots.length > 0 &&
-    slots.every(slot => slot.currentPage.state === "approved")
+    slots.every(
+      slot =>
+        slot.currentPage.state === "approved" &&
+        slot.currentPage.approvalSource === "human"
+    )
   );
 }

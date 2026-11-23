@@ -214,7 +214,9 @@ describe("reconcilePageSlots", () => {
 
 describe("canContinueReview", () => {
   it("is false when any slot's current page isn't approved, true only when every slot is", () => {
-    const approved = { currentPage: { state: "approved" } };
+    const approved = {
+      currentPage: { state: "approved", approvalSource: "human" },
+    };
     const pending = { currentPage: { state: "needs_human_review" } };
     expect(canContinueReview([approved, approved])).toBe(true);
     expect(canContinueReview([approved, pending])).toBe(false);
@@ -224,5 +226,12 @@ describe("canContinueReview", () => {
     expect(
       canContinueReview([{ currentPage: { state: "intake_rejected" } }])
     ).toBe(false);
+  });
+
+  it("is false when every page is approved but only by automatic QA, not an explicit human decision", () => {
+    const autoApproved = {
+      currentPage: { state: "approved", approvalSource: "automatic" },
+    };
+    expect(canContinueReview([autoApproved, autoApproved])).toBe(false);
   });
 });
