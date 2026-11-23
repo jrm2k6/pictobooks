@@ -22,11 +22,7 @@ export function useArtifactAccess(artifactId) {
     queryFn: async () => {
       try {
         const { access } = await api.getArtifactAccess(artifactId);
-        const response = await fetch(access.url, {
-          method: access.method,
-          headers: access.headers,
-        });
-        const blob = await response.blob();
+        const blob = await api.fetchArtifactBlob(access);
         return URL.createObjectURL(blob);
       } catch (err) {
         if (err instanceof UnauthorizedError) {

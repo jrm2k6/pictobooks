@@ -27,7 +27,7 @@ export async function replacePhotoSequence({
 export function usePageReview(bookId, primaryRunId) {
   const api = useApiClient();
   const queryClient = useQueryClient();
-  const { slots, regenerationsUsed, replacementsUsed, isLoading } =
+  const { slots, regenerationsUsed, replacementsUsed, isLoading, isError } =
     useBookPages(bookId, primaryRunId);
 
   const invalidate = () =>
@@ -41,7 +41,7 @@ export function usePageReview(bookId, primaryRunId) {
         candidateId,
         decision: "approved",
       }),
-    onSuccess: invalidate,
+    onSettled: invalidate,
   });
 
   const tryAgainMutation = useMutation({
@@ -65,13 +65,13 @@ export function usePageReview(bookId, primaryRunId) {
       }
       return api.regeneratePage(bookId, pageId);
     },
-    onSuccess: invalidate,
+    onSettled: invalidate,
   });
 
   const replaceMutation = useMutation({
     mutationFn: ({ pageId, file }) =>
       replacePhotoSequence({ api, bookId, pageId, file, sha256Hex }),
-    onSuccess: invalidate,
+    onSettled: invalidate,
   });
 
   const canContinue = canContinueReview(slots);
@@ -79,6 +79,7 @@ export function usePageReview(bookId, primaryRunId) {
   return {
     slots,
     isLoading,
+    isError,
     regenerationsUsed,
     regenerationsRemaining: Math.max(0, CAP - regenerationsUsed),
     replacementsUsed,

@@ -196,5 +196,31 @@ export function useApiClient() {
      * requires the Bearer token even once you have the URL back. */
     getArtifactAccess: artifactId =>
       request("GET", `/v1/artifacts/${artifactId}/access`),
+
+    /**
+     * Fetches the bytes behind a getArtifactAccess() result. Local mode
+     * returns a relative, same-origin URL that still requires the Bearer
+     * token (resolved against BASE_URL here); other environments return an
+     * already-signed, already-authorized external URL that must NOT get an
+     * Authorization header attached.
+     */
+    fetchArtifactBlob: async access => {
+      const isRelative = access.url.startsWith("/");
+      const url = isRelative ? `${BASE_URL}${access.url}` : access.url;
+      const headers = { ...access.headers };
+      if (isRelative) {
+        const token = await getToken();
+        headers.Authorization = `Bearer ${token}`;
+      }
+      const res = await fetch(url, { method: access.method, headers });
+      if (res.status === 401) throw new UnauthorizedError();
+      if (!res.ok) {
+        throw new ApiError(
+          res.status,
+          `Failed to fetch artifact: HTTP ${res.status}`
+        );
+      }
+      return res.blob();
+    },
   };
 }

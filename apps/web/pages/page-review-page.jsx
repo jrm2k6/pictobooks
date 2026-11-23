@@ -119,6 +119,10 @@ export function PageReviewPage() {
 
       {review.isLoading ? (
         <p className={styles.loading}>Loading your pages…</p>
+      ) : review.isError ? (
+        <p className={styles.errorMsg} role="alert">
+          Something went wrong loading this book. Try reloading the page.
+        </p>
       ) : selectedSlot ? (
         <PageDetail
           slot={selectedSlot}

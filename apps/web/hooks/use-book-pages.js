@@ -62,5 +62,6 @@ export function useBookPages(bookId, primaryRunId) {
     regenerationsUsed: query.data?.regenerationsUsed ?? 0,
     replacementsUsed: query.data?.replacementsUsed ?? 0,
     isLoading: query.isLoading,
+    isError: query.isError,
   };
 }

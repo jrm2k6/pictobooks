@@ -42,7 +42,7 @@ function buildSpreads(slots) {
 export function BookPreviewPage() {
   const { bookId, runId } = useSearch({ strict: false });
   const navigate = useNavigate();
-  const { slots, isLoading } = useBookPages(bookId, runId);
+  const { slots, isLoading, isError } = useBookPages(bookId, runId);
   const [spreadIndex, setSpreadIndex] = useState(0);
 
   const spreads = buildSpreads(slots);
@@ -76,6 +76,10 @@ export function BookPreviewPage() {
 
       {isLoading ? (
         <p className={styles.loading}>Loading your book…</p>
+      ) : isError ? (
+        <p className={styles.loading} role="alert">
+          Something went wrong loading this book. Try reloading the page.
+        </p>
       ) : (
         <>
           <div className={styles.spread} aria-live="polite">
