@@ -1086,6 +1086,62 @@ describe("WP6 authenticated pipeline API", () => {
     );
     expect(photo).toMatchObject({ intakeStatus: "rejected" });
   });
+
+  it("exposes approvalSource on getBookRun pages, distinguishing automatic from human", async () => {
+    const auto = await seedAutoApprovedPage();
+    const human = await seedReviewablePage();
+    await api.reviewCandidate(
+      owner,
+      "approve-for-approval-source-001",
+      human.bookId,
+      human.pageId,
+      { candidateId: human.candidateId, decision: "approved" }
+    );
+
+    const autoResponse = await api.getBookRun(owner, auto.bookId, auto.runId);
+    const autoPage = (
+      autoResponse.body.pages as Array<Record<string, unknown>>
+    ).find(p => p["pageId"] === auto.pageId);
+    expect(autoPage).toMatchObject({
+      state: "approved",
+      approvalSource: "automatic",
+    });
+
+    const humanResponse = await api.getBookRun(
+      owner,
+      human.bookId,
+      human.runId
+    );
+    const humanPage = (
+      humanResponse.body.pages as Array<Record<string, unknown>>
+    ).find(p => p["pageId"] === human.pageId);
+    expect(humanPage).toMatchObject({
+      state: "approved",
+      approvalSource: "human",
+    });
+  });
+
+  it("lets a customer explicitly confirm an already auto-approved page as human-approved", async () => {
+    const seeded = await seedAutoApprovedPage();
+
+    await api.reviewCandidate(
+      owner,
+      "confirm-auto-approved-001",
+      seeded.bookId,
+      seeded.pageId,
+      { candidateId: seeded.candidateId, decision: "approved" }
+    );
+
+    const response = await api.getBookRun(owner, seeded.bookId, seeded.runId);
+    const page = (response.body.pages as Array<Record<string, unknown>>).find(
+      p => p["pageId"] === seeded.pageId
+    );
+    expect(page).toMatchObject({
+      state: "approved",
+      approvalSource: "human",
+      approvedCandidateId: seeded.candidateId,
+    });
+  });
 });
 
 const seedReviewablePage = async () => {
@@ -1181,6 +1237,123 @@ const seedReviewablePage = async () => {
     )
     .run();
   return { bookId, runId, pageId, candidateId, artifactId };
+};
+
+const seedAutoApprovedPage = async () => {
+  const timestamp = new Date("2026-11-10T12:00:00.000Z").toISOString();
+  const bookId = "book-auto-approved";
+  const runId = "run-auto-approved";
+  const photoId = "photo-auto-approved";
+  const pageId = "page-auto-approved";
+  const candidateId = "candidate-auto-approved";
+  const artifactId = "clean:candidate-auto-approved";
+  const objectKey =
+    "books/book-auto-approved/runs/run-auto-approved/pages/page-auto-approved/candidates/candidate-auto-approved/clean.png";
+  const artifactBytes = new TextEncoder().encode("clean candidate");
+  const artifactSha = await digest(artifactBytes);
+  await env.PIPELINE_DB.batch([
+    env.PIPELINE_DB.prepare(
+      `INSERT INTO books (book_id, owner_id, status, created_at, updated_at)
+       VALUES (?, ?, 'review', ?, ?)`
+    ).bind(bookId, "user-owner", timestamp, timestamp),
+    env.PIPELINE_DB.prepare(
+      "INSERT INTO book_runs VALUES (?, ?, 'partially_completed', 'pictobook-preschool-v0.1', 7000, 3000, ?, ?, ?)"
+    ).bind(runId, bookId, timestamp, timestamp, timestamp),
+    env.PIPELINE_DB.prepare(
+      "INSERT INTO photos VALUES (?, ?, 1, ?, 'accepted', ?)"
+    ).bind(photoId, runId, `source:${photoId}`, timestamp),
+    env.PIPELINE_DB.prepare(
+      `INSERT INTO pages
+       (page_id, run_id, photo_id, state, initial_candidate_count,
+        repair_round_count, approved_candidate_id, approval_source,
+        terminal_reason, created_at, updated_at)
+       VALUES (?, ?, ?, 'created', 0, 0, NULL, NULL, NULL, ?, ?)`
+    ).bind(pageId, runId, photoId, timestamp, timestamp),
+    env.PIPELINE_DB.prepare(
+      `INSERT INTO operations
+       VALUES ('generate-auto-approved', ?, ?, 'generate_initial', 'completed',
+               0, 1, '{}', NULL, ?, ?, ?)`
+    ).bind(runId, pageId, timestamp, timestamp, timestamp),
+  ]);
+  await env.PIPELINE_DB.prepare(
+    "UPDATE pages SET state = 'analyzing' WHERE page_id = ?"
+  )
+    .bind(pageId)
+    .run();
+  await env.PIPELINE_DB.prepare(
+    "UPDATE pages SET state = 'generating' WHERE page_id = ?"
+  )
+    .bind(pageId)
+    .run();
+  await env.PIPELINE_DB.prepare(
+    `INSERT INTO candidates
+     VALUES (?, ?, 'generate-auto-approved', NULL, 'initial', 1, NULL, ?, ?)`
+  )
+    .bind(candidateId, pageId, artifactId, timestamp)
+    .run();
+  await env.PIPELINE_DB.prepare(
+    "UPDATE pages SET state = 'print_qa' WHERE page_id = ?"
+  )
+    .bind(pageId)
+    .run();
+  // Mirrors decideStyleQa's dual_qa_passed path: both QA kinds pass, the
+  // page moves print_qa -> style_qa -> approved, and approval_source is set
+  // to 'automatic' -- it never visits needs_human_review, unlike
+  // seedReviewablePage.
+  await env.PIPELINE_DB.batch([
+    env.PIPELINE_DB.prepare(
+      `INSERT INTO qa_results
+       (qa_result_id, candidate_id, qa_kind, status, overall_score, artifact_id, created_at)
+       VALUES (?, ?, 'print', 'passed', 1.0, NULL, ?)`
+    ).bind(`qa:print:${candidateId}`, candidateId, timestamp),
+    env.PIPELINE_DB.prepare(
+      `INSERT INTO qa_results
+       (qa_result_id, candidate_id, qa_kind, status, overall_score, artifact_id, created_at)
+       VALUES (?, ?, 'style', 'passed', 1.0, NULL, ?)`
+    ).bind(`qa:style:${candidateId}`, candidateId, timestamp),
+  ]);
+  await env.PIPELINE_DB.prepare(
+    "UPDATE pages SET state = 'style_qa' WHERE page_id = ?"
+  )
+    .bind(pageId)
+    .run();
+  await env.PIPELINE_DB.prepare(
+    `UPDATE pages SET state = 'approved', approval_source = 'automatic',
+       approved_candidate_id = ? WHERE page_id = ?`
+  )
+    .bind(candidateId, pageId)
+    .run();
+  await env.PIPELINE_ARTIFACTS.put(objectKey, artifactBytes, {
+    httpMetadata: { contentType: "image/png" },
+    customMetadata: {
+      artifactId,
+      runId,
+      sha256: artifactSha,
+      schemaVersion: "2026-11-10",
+      retentionClass: "derived",
+    },
+    sha256: await crypto.subtle.digest("SHA-256", artifactBytes),
+  });
+  await env.PIPELINE_DB.prepare(
+    `INSERT INTO artifacts
+     (artifact_id, run_id, page_id, producing_operation_id, object_key,
+      artifact_kind, schema_version, sha256, byte_size, mime_type, provider,
+      model, retention_class, deleted_at, created_at)
+     VALUES (?, ?, ?, 'generate-auto-approved', ?, 'candidate_clean',
+             '2026-11-10', ?, ?, 'image/png', 'mock', 'mock-v1',
+             'derived', NULL, ?)`
+  )
+    .bind(
+      artifactId,
+      runId,
+      pageId,
+      objectKey,
+      artifactSha,
+      artifactBytes.byteLength,
+      timestamp
+    )
+    .run();
+  return { bookId, runId, pageId, candidateId };
 };
 
 const seedIntakeRejectedPage = async () => {

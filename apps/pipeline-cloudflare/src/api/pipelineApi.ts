@@ -654,6 +654,7 @@ export class PipelineApi {
         terminalReason: (page["terminal_reason"] as string | null) ?? null,
         approvedCandidateId:
           (page["approved_candidate_id"] as string | null) ?? null,
+        approvalSource: (page["approval_source"] as string | null) ?? null,
         replacesPageId: lineage?.source_page_id ?? null,
         candidates: pageCandidates,
       };
@@ -771,6 +772,14 @@ export class PipelineApi {
                WHERE page_id = ? AND state = 'needs_human_review'`
             )
             .bind(input.candidateId, now, pageId)
+            .run();
+        } else if (row.state === "approved") {
+          await this.database
+            .prepare(
+              `UPDATE pages SET approval_source = 'human', updated_at = ?
+               WHERE page_id = ? AND state = 'approved'`
+            )
+            .bind(now, pageId)
             .run();
         }
       } else if (input.decision === "rejected") {
