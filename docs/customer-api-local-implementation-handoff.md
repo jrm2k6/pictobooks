@@ -1,7 +1,8 @@
 # Customer API local implementation handoff
 
-- **Status:** In progress
-- **Last updated:** 2026-11-11
+- **Status:** In progress — book/run flow and candidate review are wired end
+  to end; checkout/edition selection remain
+- **Last updated:** 2026-11-23
 - **Owner:** Primary implementation agent
 - **Goal:** Make the customer API flow usable end to end against local Worker,
   D1, R2, and Workflow bindings, with no calls to remote Cloudflare resources,
@@ -85,11 +86,11 @@
 
 ### Customer API operations
 
-- [ ] `GET /v1/books` — owner-scoped camelCase book summaries with current run
-      and order summaries.
-- [ ] `POST /v1/books` — create an idempotent draft with title, child name, and
-      age.
-- [ ] `PATCH /v1/books/{bookId}` — update owner-scoped draft details.
+- [x] `GET /v1/books` — owner-scoped camelCase book summaries with current run
+      and order summaries; called by `use-books.js`.
+- [x] `POST /v1/books` — create an idempotent draft with title, child name, and
+      age; called by `use-create-book.js`.
+- [x] `PATCH /v1/books/{bookId}` — update owner-scoped draft details.
 - [x] `GET /v1/books/{bookId}/runs` — existing route; verify local behavior.
 - [x] `POST /v1/books/{bookId}/runs` — create pages and local upload intents;
       keep customer photo count rules consistent with the UI (5–10).
@@ -97,14 +98,19 @@
       order before start.
 - [x] `POST /v1/books/{bookId}/runs/{runId}/start` — local Workflow binding
       completes a mock run through the running Worker.
-- [ ] `GET /v1/books/{bookId}/runs/{runId}` — owner-scoped camelCase nested
-      pages/candidates/QA/review response.
+- [x] `GET /v1/books/{bookId}/runs/{runId}` — owner-scoped camelCase nested
+      pages/candidates/QA/review response; polled by `use-book-run.js`.
 - [x] `POST /v1/books/{bookId}/runs/{runId}/upload-intents/{uploadIntentId}/refresh`
       — issue a local upload URL for an existing pending intent.
-- [x] `POST /v1/books/{bookId}/pages/{pageId}/reviews` — existing route; local
-      tests and flow must cover `changes_requested` notes.
-- [x] `POST /v1/books/{bookId}/pages/{pageId}/regenerations` — existing route;
-      keep repair feedback and mock workflow local.
+- [x] `POST /v1/books/{bookId}/pages/{pageId}/reviews` — called by
+      `use-page-review.js` from the real `/books/new/pages` review screen;
+      capped at 3 regenerations per book per customer.
+- [x] `POST /v1/books/{bookId}/pages/{pageId}/regenerations` — called by
+      `use-page-review.js`; same per-book regeneration cap as above.
+- [x] `POST /v1/books/{bookId}/pages/{pageId}/photo-replacements` — new
+      endpoint for recovering from `intake_rejected`/`intake_needs_review`
+      pages; its own independent 3-per-book cap. Called by
+      `use-page-review.js`'s `replacePhoto`.
 - [x] `GET /v1/artifacts/{artifactId}/access` — existing endpoint; local mode
       must return owner-authorized local access rather than an R2 S3 URL.
 - [x] `GET /v1/catalog/editions` — local sample catalog, explicitly marked
@@ -118,10 +124,45 @@
       request/response shapes and status codes.
 - [x] Update `docs/customer-screen-api-map.yaml` operation status and local
       upload/artifact behavior.
-- [ ] Connect React Query hooks to the local API only after API response shapes
+- [x] Connect React Query hooks to the local API only after API response shapes
       stabilize. Do not make presentational screen components call `fetch`.
+      `apps/web/hooks/use-books.js`, `use-book-run.js`, `use-create-book.js`,
+      `use-create-book-run.js`, `use-book-pages.js`, and `use-page-review.js`
+      call the API through `api-client.js`; every real page
+      (`books-page.jsx`, `book-details-page.jsx`, `photo-selection-page.jsx`,
+      `order-pages-page.jsx`, `processing-page.jsx`, `page-review-page.jsx`,
+      `book-preview-page.jsx`) uses them. `sampleData.js` is only imported by
+      the dev-only `prototype.jsx` storybook, which is excluded from
+      production builds.
 - [x] Document local session and smoke commands plus mock-only limitations in
       this handoff and the API contract.
+
+### Resolved 2026-11-23: candidate review and preview are now wired
+
+The gap logged on 2026-11-17 (no page/route for reviewing a generated
+candidate before checkout — `processing-page.jsx` redirected straight to
+`/books`) is closed:
+
+- [x] `/books/new/pages` (`page-review-page.jsx`) — grid-hub + detail-drill-in
+      review screen, wired to `reviewCandidate`/`regeneratePage`/
+      `createPhotoReplacement` via `use-page-review.js`. Handles every page
+      state (auto-approved, QA-flagged, rejected, intake-rejected,
+      provider/budget failures), both regeneration-cap and
+      replacement-cap exhaustion, and requires explicit human confirmation
+      (`approvalSource: "human"`) before "Continue" enables — an
+      auto-QA-passed page no longer silently counts as reviewed.
+- [x] `/books/new/preview` (`book-preview-page.jsx`) — read-only spread view
+      of the finished book, reached after review.
+- [ ] Checkout itself — `router.ts` still has no `/v1/books/{bookId}/orders`
+      route (tracked above under "Customer API operations"), and no
+      edition-selection/checkout screen exists yet in `apps/web/`. Preview's
+      "Choose an edition" action is a placeholder.
+
+Known, deliberately-deferred items from this work (non-blocking): e2e
+coverage for the two new screens exists but is unverified end-to-end (this
+environment can't complete a real Clerk sign-in); a handful of small
+duplication/cosmetic items (see the candidate-review design doc's final
+review notes if resuming this work).
 
 ## Endpoint subagent assignments
 
@@ -165,9 +206,11 @@ cross-owner credentials.
 
 Local auth setup is now available with
 `pnpm --filter pipeline-cloudflare local:session`; it applies migrations to
-local D1 and prints a new bearer token once. The current API still needs a
-local mock order implementation and customer-facing HTTP review/repair smoke
-coverage before the broader customer journey is complete.
+local D1 and prints a new bearer token once. The API still needs a local mock
+order implementation and customer-facing HTTP review/repair smoke coverage.
+On the client side, `apps/web` now covers book creation through candidate
+review and preview end to end; only edition selection and checkout remain
+unwired.
 
 ## Handoff notes
 
