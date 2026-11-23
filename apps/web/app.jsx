@@ -12,6 +12,8 @@ import { BookDetailsPage } from "./pages/book-details-page.jsx";
 import { PhotoSelectionPage } from "./pages/photo-selection-page.jsx";
 import { OrderPagesPage } from "./pages/order-pages-page.jsx";
 import { ProcessingPage } from "./pages/processing-page.jsx";
+import { PageReviewPage } from "./pages/page-review-page.jsx";
+import { BookPreviewPage } from "./pages/book-preview-page.jsx";
 import { AuthLayout, clerkAppearance } from "./auth-layout.jsx";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -152,6 +154,18 @@ const bookCreatingRoute = createRoute({
   component: ProcessingPage,
 });
 
+const pageReviewRoute = createRoute({
+  getParentRoute: () => authedLayout,
+  path: "/books/new/pages",
+  component: PageReviewPage,
+});
+
+const bookPreviewRoute = createRoute({
+  getParentRoute: () => authedLayout,
+  path: "/books/new/preview",
+  component: BookPreviewPage,
+});
+
 // ── Router ─────────────────────────────────────────────────────────────
 
 const router = createRouter({
@@ -166,6 +180,8 @@ const router = createRouter({
       bookPhotosRoute,
       bookOrderRoute,
       bookCreatingRoute,
+      pageReviewRoute,
+      bookPreviewRoute,
     ]),
   ]),
 });

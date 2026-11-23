@@ -10,7 +10,8 @@ const TERMINAL_FAILED = new Set(["failed", "cancelled"]);
 /**
  * Step 4 of 4 — Processing.
  * Polls useBookRun every 2 s while the run is active.
- * Redirects to /books on completion; shows error state on failure.
+ * Redirects to /books/new/pages (with bookId/runId) on completion; shows
+ * error state on failure.
  */
 export function ProcessingPage() {
   const { bookId, runId } = useSearch({ strict: false });
@@ -22,7 +23,7 @@ export function ProcessingPage() {
   useEffect(() => {
     if (!run) return;
     if (TERMINAL_COMPLETE.has(run.status)) {
-      navigate({ to: "/books" });
+      navigate({ to: "/books/new/pages", search: { bookId, runId } });
     }
   }, [run?.status]);
 

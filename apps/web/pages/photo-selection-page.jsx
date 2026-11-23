@@ -3,21 +3,13 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { WizardShell } from "./wizard-shell.jsx";
 import { useCreateBookRun } from "../hooks/use-create-book-run.js";
 import { useApiClient } from "../api-client.js";
+import { sha256Hex } from "../sha256.js";
 import styles from "./photo-selection-page.module.css";
 
 const ACCEPTED_TYPES = "image/jpeg,image/png,image/webp";
 const MIN_PHOTOS = 5;
 const MAX_PHOTOS = 20;
 const MAX_BYTES = 26_214_400; // 25 MB per photo
-
-/** Compute SHA-256 hex digest for a File. */
-async function sha256Hex(file) {
-  const buffer = await file.arrayBuffer();
-  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("");
-}
 
 /**
  * Step 2 of 4 — Photo selection.
