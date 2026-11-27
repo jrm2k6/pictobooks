@@ -10,7 +10,10 @@ import {
   type PDFPage,
 } from "pdf-lib";
 import { sha256Hex } from "./auth.js";
-import { mockCandidateSvg, mockPageDrawing } from "../wp5/mockPageDrawing.js";
+import {
+  mockCandidateSvg,
+  mockPageDrawing,
+} from "../book-run/mockPageDrawing.js";
 
 const MAX_PAGES = 24;
 const MAX_BYTES = 16 * 1024 * 1024;

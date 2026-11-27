@@ -137,9 +137,9 @@ Terminal states do not enqueue themselves. Pages passing both gates are automati
 
 ## Known Prototype Gaps Before Production
 
-- WP5 now connects the production Workflow, D1, R2, and image Container with bounded infrastructure retries, semantic repair rounds, and Book Run cost ceilings.
+- The durable Book Run workflow connects the production Workflow, D1, R2, and image Container with bounded infrastructure retries, semantic repair rounds, and Book Run cost ceilings.
 - Production approval requires both QA gates to pass on the same Candidate. The local prototype remains a separate compatibility tool and may use older display vocabulary.
-- Generation and Style QA use deterministic mocks in the hosted WP5 proof. The Nano Banana adapter still needs credentials and an ambiguous-timeout reconciliation test before customer use.
+- Generation and Style QA use deterministic mocks in the hosted durable Book Run workflow proof. The Nano Banana adapter still needs credentials and an ambiguous-timeout reconciliation test before customer use.
 - WP6 must add authenticated customer APIs and authorization. WP8 must add provider concurrency controls, operational alerts, and a global kill switch.
 
 ## Local Commands

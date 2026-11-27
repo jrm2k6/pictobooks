@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { PDFDocument, PDFName, PDFNumber, PageSizes } from "pdf-lib";
-import { mockCandidateSvg } from "../src/wp5/mockPageDrawing.js";
+import { mockCandidateSvg } from "../src/book-run/mockPageDrawing.js";
 import { applyD1Migrations, reset, type D1Migration } from "cloudflare:test";
 import {
   afterEach,

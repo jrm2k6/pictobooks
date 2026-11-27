@@ -42,7 +42,7 @@ exercise the complete download flow with synthetic fixtures, and print a
 representative PDF. In the Worker, intake currently asks Nano Banana 2.1 for
 JSON, while Google lists structured outputs as unsupported for that model.
 Pin a vision model for intake and verify accepted, rejected, and borderline
-photos. [Worker intake](../../../apps/pipeline-cloudflare/src/wp5/bookRun.ts) ·
+photos. [Worker intake](../../../apps/pipeline-cloudflare/src/book-run/bookRun.ts) ·
 [Nano Banana 2.1 model card](https://aistudio.google.com/docs/models/gemini-nano-banana-2.1)
 
 ## Paid beta
@@ -72,7 +72,7 @@ estimates exclude intake and later customer-triggered generation and photo
 replacement. The pipeline currently records configured estimates in its
 actual-cost field. Measure spend for completed and abandoned previews, then
 reconcile the totals against provider billing. [Generation policy](../../../apps/pipeline-cloudflare/src/domain/generationPolicy.ts) ·
-[Worker accounting](../../../apps/pipeline-cloudflare/src/wp5/bookRun.ts)
+[Worker accounting](../../../apps/pipeline-cloudflare/src/book-run/bookRun.ts)
 
 Calculate generation cost per sale as total cohort generation spend divided by
 paid books. At an illustrative $1.50 per started book and 40% conversion, that

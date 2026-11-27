@@ -54,7 +54,7 @@ pnpm --filter pipeline-image-worker test
 The [ADR 0008](../../docs/adr/0008-stateless-image-container.md) also defines
 the guarded local-to-preview and explicit production infrastructure smoke flow.
 
-## WP5 Book Run Workflow
+## Durable Book Run workflow
 
 Run the D1/R2-isolated orchestration and replay tests locally with the package
 test command above. To exercise the deployed preview Workflow, mock provider,

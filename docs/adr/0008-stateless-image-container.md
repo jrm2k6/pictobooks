@@ -123,8 +123,8 @@ therefore cannot incur Nano Banana charges.
 Worker Preview automatically isolates Container apps and Durable Object
 namespaces, but D1 and R2 are only isolated when the preview bindings target
 separate resources. Workflows also require a dedicated non-production binding.
-For the full WP5 Book Run test, use a persistent staging environment with its own
-D1, R2, Workflow, S3 token, and budgets rather than an ephemeral Worker Preview.
+For a full durable Book Run workflow test, use a persistent staging environment
+with its own D1, R2, Workflow, S3 token, and budgets.
 See <https://developers.cloudflare.com/workers/previews/resources/>.
 
 ### 3. Production infrastructure smoke
@@ -142,8 +142,8 @@ pnpm --filter pipeline-cloudflare smoke:production -- \
   --confirm-production pictobook-production
 ```
 
-This is an infrastructure smoke, not a customer Book Run. After WP5, add a
-separate staging-only full-run smoke with a provider cost cap, one page, bounded
+This infrastructure smoke covers the image Container. The durable Book Run
+workflow (work package WP5) has a separate staging-only full-run smoke with a provider cost cap, one page, bounded
 repair attempts, and a unique test tenant. Production provider calls should not
 be part of the routine WP4 smoke.
 

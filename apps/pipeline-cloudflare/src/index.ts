@@ -9,13 +9,13 @@ import {
   ProductionBookRun,
   type ExecutionProfile,
   type WorkflowSteps,
-} from "./wp5/bookRun.js";
-import { ContainerImageProcessor } from "./wp5/containerImageProcessor.js";
-import { LocalMockImageProcessor } from "./wp5/localMockImageProcessor.js";
+} from "./book-run/bookRun.js";
+import { ContainerImageProcessor } from "./book-run/containerImageProcessor.js";
+import { LocalMockImageProcessor } from "./book-run/localMockImageProcessor.js";
 import {
   createSyntheticBookRun,
   readBookRunStatus,
-} from "./wp5/syntheticBookRun.js";
+} from "./book-run/syntheticBookRun.js";
 import { handleApiRequest, type RuntimeEnv } from "./api/router.js";
 
 const CONTAINER_PORT = 8790;

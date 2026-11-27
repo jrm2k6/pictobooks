@@ -9,7 +9,7 @@ import {
   maximumPageCostMicros,
 } from "../domain/generationPolicy.js";
 import { R2ArtifactStore } from "../storage/r2ArtifactStore.js";
-import { readBookRunStatus } from "../wp5/syntheticBookRun.js";
+import { readBookRunStatus } from "../book-run/syntheticBookRun.js";
 import { createPrintablePdf, PrintablePdfError } from "./printablePdf.js";
 import { sha256Hex, type Principal } from "./auth.js";
 import type { ArtifactSigner, SignedArtifactRequest } from "./r2Presigner.js";
