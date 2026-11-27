@@ -7,6 +7,8 @@
 import { useAuth } from "@clerk/react";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8787";
+const UPLOAD_CONTENT_PATH =
+  /^\/v1\/books\/[^/]+\/runs\/[^/]+\/upload-intents\/[^/]+\/content$/;
 
 /** Thrown on 401 responses; hooks should catch and redirect to /sign-in. */
 export class UnauthorizedError extends Error {
@@ -39,11 +41,12 @@ export function useApiClient() {
    * @param {unknown} [opts.body]           JSON body
    * @param {boolean} [opts.withIdempotency] Generate a fresh Idempotency-Key header
    * @param {object} [opts.extraHeaders]    Additional headers
+   * @param {boolean} [opts.pdf]           Read a PDF attachment as a Blob
    */
   async function request(
     method,
     path,
-    { body, withIdempotency = false, extraHeaders = {} } = {}
+    { body, withIdempotency = false, extraHeaders = {}, pdf = false } = {}
   ) {
     const token = await getToken();
     const headers = {
@@ -64,6 +67,7 @@ export function useApiClient() {
     const res = await fetch(`${BASE_URL}${path}`, {
       method,
       headers,
+      cache: pdf ? "no-store" : undefined,
       body: body != null ? JSON.stringify(body) : undefined,
     });
 
@@ -86,6 +90,12 @@ export function useApiClient() {
 
     if (res.status === 204 || res.headers.get("content-length") === "0")
       return null;
+    if (pdf) {
+      if (res.headers.get("content-type") !== "application/pdf") {
+        throw new Error("The download was not a PDF.");
+      }
+      return res.blob();
+    }
     return res.json();
   }
 
@@ -127,9 +137,27 @@ export function useApiClient() {
         withIdempotency: true,
       }),
 
+    /** PATCH /v1/books/:bookId/runs/:runId/pages/:pageId/inclusion */
+    setPageInclusion: (bookId, runId, pageId, included) =>
+      request(
+        "PATCH",
+        `/v1/books/${bookId}/runs/${runId}/pages/${pageId}/inclusion`,
+        {
+          body: { included },
+          withIdempotency: true,
+        }
+      ),
+
     /** GET /v1/books/:bookId/runs/:runId → BookRunDetail */
     getBookRun: (bookId, runId) =>
       request("GET", `/v1/books/${bookId}/runs/${runId}`),
+
+    downloadPrintablePdf: (bookId, runId) =>
+      request(
+        "GET",
+        `/v1/books/${encodeURIComponent(bookId)}/runs/${encodeURIComponent(runId)}/printable-pdf`,
+        { pdf: true }
+      ),
 
     /**
      * Direct photo upload to R2 (local mode: through Worker; other envs: presigned URL).
@@ -137,22 +165,33 @@ export function useApiClient() {
      * @param {Record<string,string>} requiredHeaders
      * @param {File} file
      */
-    uploadPhoto: (uploadUrl, requiredHeaders, file) =>
-      fetch(uploadUrl, {
+    uploadPhoto: async (uploadUrl, requiredHeaders, file) => {
+      const target = new URL(uploadUrl, BASE_URL);
+      const isWorkerUpload =
+        target.origin === new URL(BASE_URL).origin &&
+        UPLOAD_CONTENT_PATH.test(target.pathname);
+      const headers = { "Content-Type": file.type, ...requiredHeaders };
+      if (isWorkerUpload) {
+        const token = await getToken();
+        headers.Authorization = `Bearer ${token}`;
+      }
+      const res = await fetch(isWorkerUpload ? target.href : uploadUrl, {
         method: "PUT",
-        headers: { "Content-Type": file.type, ...requiredHeaders },
+        headers,
         body: file,
-      }).then(res => {
-        if (!res.ok)
-          throw new ApiError(res.status, `Upload failed: HTTP ${res.status}`);
-        return res;
-      }),
+      });
+      if (isWorkerUpload && res.status === 401) throw new UnauthorizedError();
+      if (!res.ok)
+        throw new ApiError(res.status, `Upload failed: HTTP ${res.status}`);
+      return res;
+    },
 
     /** GET /v1/books/:bookId/runs → { runs: BookRunSummary[] } — note: the
      * Worker returns raw snake_case columns here (the one endpoint that
      * does), so this method maps them to camelCase before returning. */
-    listBookRuns: async bookId => {
-      const result = await request("GET", `/v1/books/${bookId}/runs`);
+    listBookRuns: async (bookId, { liveLineageOnly = false } = {}) => {
+      const query = liveLineageOnly ? "?lineage=live" : "";
+      const result = await request("GET", `/v1/books/${bookId}/runs${query}`);
       return {
         runs: result.runs.map(run => ({
           runId: run.run_id,

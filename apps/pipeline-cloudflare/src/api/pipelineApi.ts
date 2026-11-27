@@ -9,7 +9,8 @@ import {
   maximumPageCostMicros,
 } from "../domain/generationPolicy.js";
 import { R2ArtifactStore } from "../storage/r2ArtifactStore.js";
-import { readBookRunStatus } from "../wp5/syntheticBookRun.js";
+import { readBookRunStatus } from "../book-run/syntheticBookRun.js";
+import { createPrintablePdf, PrintablePdfError } from "./printablePdf.js";
 import { sha256Hex, type Principal } from "./auth.js";
 import type { ArtifactSigner, SignedArtifactRequest } from "./r2Presigner.js";
 import { updatePhotoOrder as persistPhotoOrder } from "./photoOrderOperation.js";
@@ -93,7 +94,8 @@ export class PipelineApi {
     },
     private readonly localCustomerApi = false,
     private readonly minPhotosPerRun = MIN_PHOTOS,
-    private readonly maxPhotosPerRun = MAX_PHOTOS_PER_RUN
+    private readonly maxPhotosPerRun = MAX_PHOTOS_PER_RUN,
+    private readonly printablePdfEnabled = false
   ) {
     this.artifacts = new R2ArtifactStore(bucket, database);
   }
@@ -237,16 +239,33 @@ export class PipelineApi {
 
   async listBookRuns(
     principal: Principal,
-    bookId: string
+    bookId: string,
+    liveLineageOnly = false
   ): Promise<ApiResponse> {
     await this.requireOwnedBook(principal.userId, bookId);
     const runs = await this.database
       .prepare(
-        `SELECT run_id, book_id, status, style_pack_version, cost_ceiling_micros,
-              cost_spent_micros, created_at, updated_at, completed_at
-       FROM book_runs WHERE book_id = ? ORDER BY created_at DESC LIMIT 100`
+        `SELECT r.run_id, r.book_id, r.status, r.style_pack_version, r.cost_ceiling_micros,
+                r.cost_spent_micros, r.created_at, r.updated_at, r.completed_at
+         FROM book_runs r
+         WHERE r.book_id = ?
+         ${
+           liveLineageOnly
+             ? `
+           AND EXISTS (
+             SELECT 1 FROM book_run_regenerations l WHERE l.new_run_id = r.run_id
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM upload_intents ui JOIN photos up ON up.photo_id = ui.photo_id
+             WHERE ui.run_id = r.run_id AND up.source_artifact_id IS NULL AND ui.expires_at <= ?
+           )
+         `
+             : ""
+         }
+         ORDER BY r.created_at DESC, r.rowid ASC
+         ${liveLineageOnly ? "" : "LIMIT 100"}`
       )
-      .bind(bookId)
+      .bind(...(liveLineageOnly ? [bookId, this.isoNow()] : [bookId]))
       .all();
     return { status: 200, body: { runs: runs.results } };
   }
@@ -616,6 +635,17 @@ export class PipelineApi {
 
     const readyPageCount = pages.filter(p => p["state"] === "approved").length;
 
+    const photoOrdinals = new Map(
+      photosResult.results.map(photo => [
+        photo["photo_id"],
+        Number(photo["ordinal"]),
+      ])
+    );
+    pages.sort(
+      (left, right) =>
+        (photoOrdinals.get(left["photo_id"]) ?? 0) -
+        (photoOrdinals.get(right["photo_id"]) ?? 0)
+    );
     const mappedPages = pages.map(page => {
       const pageId = page["page_id"] as string;
       const pageCandidates = candidates
@@ -649,6 +679,7 @@ export class PipelineApi {
         });
       return {
         pageId,
+        included: page["included"] !== 0,
         photoId: page["photo_id"],
         state: page["state"],
         terminalReason: (page["terminal_reason"] as string | null) ?? null,
@@ -671,6 +702,7 @@ export class PipelineApi {
         completedAt: (run["completed_at"] as string | null) ?? null,
         regenerationKind: lineage?.kind ?? null,
         uploadExpired,
+        printablePdfEnabled: this.printablePdfEnabled && !lineage,
         readyPageCount,
         totalPageCount: pages.length,
         pages: mappedPages,
@@ -684,6 +716,108 @@ export class PipelineApi {
     };
   }
 
+  setPageInclusion(
+    principal: Principal,
+    key: string,
+    bookId: string,
+    runId: string,
+    pageId: string,
+    included: boolean
+  ): Promise<ApiResponse> {
+    const operation = `page-inclusion:${bookId}:${runId}:${pageId}:${included}`;
+    return this.mutate(principal, key, operation, async () => {
+      const body = { pageId, included };
+      // Commit the choice and its replay result together. A duplicate that
+      // enters this batch after another request completed the key must not
+      // reapply the choice to the page.
+      const [, , saved] = await this.database.batch<{
+        response_json: string;
+      }>([
+        this.database
+          .prepare(
+            `UPDATE pages SET included = ?1
+             WHERE page_id = ?2 AND run_id = ?3
+             AND EXISTS (
+               SELECT 1 FROM book_runs r JOIN books b ON b.book_id = r.book_id
+               WHERE r.run_id = ?3 AND r.book_id = ?4 AND b.owner_id = ?5
+             )
+             AND NOT EXISTS (
+               SELECT 1 FROM book_run_regenerations WHERE new_run_id = ?3
+             )
+             AND EXISTS (
+               SELECT 1 FROM api_idempotency
+               WHERE owner_id = ?5 AND idempotency_key = ?6 AND operation = ?7
+                 AND response_status IS NULL
+             )`
+          )
+          .bind(
+            included ? 1 : 0,
+            pageId,
+            runId,
+            bookId,
+            principal.userId,
+            key,
+            operation
+          ),
+        this.database
+          .prepare(
+            `UPDATE api_idempotency
+             SET response_status = 200, response_json = ?, completed_at = ?
+             WHERE owner_id = ? AND idempotency_key = ? AND operation = ?
+               AND response_status IS NULL AND changes() = 1`
+          )
+          .bind(
+            JSON.stringify(body),
+            this.isoNow(),
+            principal.userId,
+            key,
+            operation
+          ),
+        this.database
+          .prepare(
+            `SELECT response_json FROM api_idempotency
+             WHERE owner_id = ? AND idempotency_key = ? AND operation = ?
+               AND response_status = 200`
+          )
+          .bind(principal.userId, key, operation),
+      ]);
+      if (!saved?.results[0]) throw new ApiProblem(404, "page_not_found");
+      return { status: 200, body };
+    });
+  }
+
+  async downloadPrintablePdf(
+    principal: Principal,
+    bookId: string,
+    runId: string
+  ): Promise<Response> {
+    if (!this.printablePdfEnabled) throw new ApiProblem(404, "not_found");
+    try {
+      const pdf = await createPrintablePdf(
+        this.database,
+        this.bucket,
+        principal.userId,
+        bookId,
+        runId,
+        this.isoNow(),
+        this.localCustomerApi
+      );
+      return new Response(pdf, {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": 'attachment; filename="pictobook.pdf"',
+          "Cache-Control": "private, no-store",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    } catch (error) {
+      if (error instanceof PrintablePdfError) {
+        throw new ApiProblem(error.status, error.code);
+      }
+      throw error;
+    }
+  }
+
   reviewCandidate(
     principal: Principal,
     key: string,
@@ -693,9 +827,17 @@ export class PipelineApi {
       candidateId: string;
       decision: "approved" | "rejected" | "changes_requested";
       notes?: string;
+      originalPageId?: string;
     }
   ): Promise<ApiResponse> {
-    return this.mutate(principal, key, `review:${pageId}`, async stable => {
+    const operation =
+      input.originalPageId === undefined
+        ? `review:${pageId}`
+        : `review:${pageId}:slot:${input.originalPageId}:${input.candidateId}`;
+    return this.mutate(principal, key, operation, async stable => {
+      if (input.originalPageId !== undefined && input.decision !== "approved") {
+        throw new ApiProblem(400, "invalid_review");
+      }
       const row = await this.requireOwnedCandidate(
         principal.userId,
         bookId,
@@ -705,18 +847,16 @@ export class PipelineApi {
       if (!isReviewDecision(input.decision)) {
         throw new ApiProblem(400, "invalid_review_decision");
       }
-      if (
-        input.decision === "approved" &&
-        row.state === "approved" &&
-        row.approved_candidate_id !== input.candidateId
-      ) {
-        throw new ApiProblem(409, "page_already_approved");
-      }
-      if (
-        input.decision === "approved" &&
-        !["approved", "needs_human_review"].includes(row.state)
-      ) {
-        throw new ApiProblem(409, "page_not_reviewable");
+      if (input.decision === "approved") {
+        return this.approveCandidate(
+          principal,
+          pageId,
+          input.candidateId,
+          stable,
+          input.notes,
+          bookId,
+          input.originalPageId
+        );
       }
       if (input.decision === "rejected" && row.state !== "needs_human_review") {
         throw new ApiProblem(409, "page_not_reviewable");
@@ -763,26 +903,7 @@ export class PipelineApi {
             now
           ),
       ]);
-      if (input.decision === "approved") {
-        if (row.state === "needs_human_review") {
-          await this.database
-            .prepare(
-              `UPDATE pages SET state = 'approved', approved_candidate_id = ?,
-                 approval_source = 'human', terminal_reason = NULL, updated_at = ?
-               WHERE page_id = ? AND state = 'needs_human_review'`
-            )
-            .bind(input.candidateId, now, pageId)
-            .run();
-        } else if (row.state === "approved") {
-          await this.database
-            .prepare(
-              `UPDATE pages SET approval_source = 'human', updated_at = ?
-               WHERE page_id = ? AND state = 'approved'`
-            )
-            .bind(now, pageId)
-            .run();
-        }
-      } else if (input.decision === "rejected") {
+      if (input.decision === "rejected") {
         await this.database
           .prepare(
             `UPDATE pages SET state = 'rejected', terminal_reason = 'human_rejected',
@@ -815,6 +936,162 @@ export class PipelineApi {
         },
       };
     });
+  }
+
+  private async approveCandidate(
+    principal: Principal,
+    pageId: string,
+    candidateId: string,
+    stableId: string,
+    notes: string | undefined,
+    bookId: string,
+    originalPageId?: string
+  ): Promise<ApiResponse> {
+    const now = this.isoNow();
+    const bindings = [
+      pageId,
+      candidateId,
+      `review-${stableId}`,
+      principal.userId,
+      normalizeNotes(notes),
+      now,
+      originalPageId ?? null,
+      bookId,
+    ];
+    // Resolve the current live descendant inside the same transaction that
+    // creates the review. A concurrent exclusion, replacement, or regeneration
+    // must win or lose before this batch, never between its reads and writes.
+    const slotIsCurrent = `(?7 IS NULL OR EXISTS (
+      WITH RECURSIVE replacements AS (
+        SELECT p.page_id, p.run_id, l.source_page_id, l.source_run_id,
+          ROW_NUMBER() OVER (
+            PARTITION BY l.source_page_id ORDER BY r.created_at DESC, r.rowid ASC, ph.ordinal ASC
+          ) AS priority
+        FROM book_run_regenerations l
+        JOIN book_runs r ON r.run_id = l.new_run_id AND r.book_id = ?8
+        JOIN pages p ON p.run_id = r.run_id
+        JOIN photos ph ON ph.photo_id = p.photo_id AND ph.run_id = p.run_id
+        WHERE NOT EXISTS (
+          SELECT 1 FROM upload_intents ui JOIN photos up ON up.photo_id = ui.photo_id
+          WHERE ui.run_id = r.run_id AND up.source_artifact_id IS NULL AND ui.expires_at <= ?6
+        )
+      ), lineage(page_id, run_id) AS (
+        SELECT p.page_id, p.run_id FROM pages p
+        JOIN book_runs r ON r.run_id = p.run_id AND r.book_id = ?8
+        JOIN books b ON b.book_id = r.book_id AND b.owner_id = ?4
+        WHERE p.page_id = ?7 AND p.included = 1
+          AND NOT EXISTS (
+            SELECT 1 FROM book_run_regenerations l WHERE l.new_run_id = p.run_id
+          )
+        UNION
+        SELECT child.page_id, child.run_id FROM lineage parent
+        JOIN replacements child ON child.source_page_id = parent.page_id
+          AND child.source_run_id = parent.run_id AND child.priority = 1
+      )
+      SELECT 1 FROM lineage page
+      WHERE page.page_id = ?1 AND NOT EXISTS (
+        SELECT 1 FROM replacements child WHERE child.source_page_id = page.page_id
+      )
+    ))`;
+    const eligiblePage = `(p.state = 'needs_human_review' OR
+      (p.state = 'approved' AND p.approved_candidate_id = ?2))`;
+    const storedApproval = `FROM reviews r JOIN pages p ON p.page_id = r.page_id
+      WHERE r.page_id = ?1 AND r.candidate_id = ?2 AND r.decision = 'approved'
+        AND p.state = 'approved' AND p.approved_candidate_id = r.candidate_id
+        AND ${slotIsCurrent}`;
+    const reviewPayload = `json_object(
+      'reviewId', r.review_id, 'candidateId', r.candidate_id, 'decision', r.decision
+    )`;
+
+    // The unique approval index chooses the winner across requests with
+    // different idempotency keys. Build subsequent writes from that row
+    // so a retry also completes an approval left by the previous split write.
+    const [, , , , snapshot] = await this.database.batch<{
+      state: string;
+      slot_is_current: number;
+      approved_candidate_id: string | null;
+      review_id: string | null;
+      review_candidate_id: string | null;
+    }>([
+      this.database
+        .prepare(
+          `INSERT INTO reviews
+           (review_id, page_id, candidate_id, reviewer_id, decision, notes, created_at)
+         SELECT ?3, p.page_id, ?2, ?4, 'approved', ?5, ?6
+         FROM pages p WHERE p.page_id = ?1 AND ${eligiblePage} AND ${slotIsCurrent}
+         ON CONFLICT(review_id) DO NOTHING
+         ON CONFLICT(page_id) WHERE decision = 'approved' DO NOTHING`
+        )
+        .bind(...bindings),
+      this.database
+        .prepare(
+          `UPDATE pages AS p SET state = 'approved', approved_candidate_id = ?2,
+           approval_source = 'human', terminal_reason = NULL, updated_at = ?6
+         WHERE p.page_id = ?1 AND ${eligiblePage} AND ${slotIsCurrent}
+           AND p.approval_source IS NOT 'human'
+           AND EXISTS (
+             SELECT 1 FROM reviews r
+             WHERE r.page_id = p.page_id AND r.candidate_id = ?2 AND r.decision = 'approved'
+           )`
+        )
+        .bind(...bindings),
+      this.database
+        .prepare(
+          `INSERT INTO operations
+           (operation_id, run_id, page_id, operation_kind, status,
+            semantic_attempt, infrastructure_retry_count, outcome_json,
+            failure_class, created_at, updated_at, completed_at)
+         SELECT 'review:' || r.review_id, p.run_id, p.page_id, 'review', 'completed',
+           0, 0, ${reviewPayload}, NULL, r.created_at, r.created_at, r.created_at
+         ${storedApproval}
+         ON CONFLICT(operation_id) DO NOTHING`
+        )
+        .bind(...bindings),
+      this.database
+        .prepare(
+          `INSERT INTO audit_events
+           (audit_event_id, run_id, page_id, operation_id, event_kind,
+            actor_type, actor_id, payload_json, created_at)
+         SELECT 'audit-' || substr(r.review_id, 8), p.run_id, p.page_id,
+           'review:' || r.review_id, 'candidate_reviewed', 'reviewer', r.reviewer_id,
+           ${reviewPayload}, r.created_at
+         ${storedApproval}
+         ON CONFLICT(audit_event_id) DO NOTHING`
+        )
+        .bind(...bindings),
+      this.database
+        .prepare(
+          `SELECT p.state, p.approved_candidate_id,
+           r.review_id, r.candidate_id AS review_candidate_id, ${slotIsCurrent} AS slot_is_current
+         FROM pages p LEFT JOIN reviews r ON r.page_id = p.page_id AND r.decision = 'approved'
+         WHERE p.page_id = ?1`
+        )
+        .bind(...bindings),
+    ]);
+
+    const page = snapshot?.results[0];
+    if (originalPageId !== undefined && page?.slot_is_current !== 1) {
+      throw new ApiProblem(409, "page_selection_stale");
+    }
+    if (
+      (page?.approved_candidate_id &&
+        page.approved_candidate_id !== candidateId) ||
+      (page?.review_candidate_id && page.review_candidate_id !== candidateId)
+    ) {
+      throw new ApiProblem(409, "page_already_approved");
+    }
+    if (page?.state !== "approved" || !page.review_id) {
+      throw new ApiProblem(409, "page_not_reviewable");
+    }
+    return {
+      status: 201,
+      body: {
+        reviewId: page.review_id,
+        pageId,
+        candidateId,
+        decision: "approved",
+      },
+    };
   }
 
   regeneratePage(

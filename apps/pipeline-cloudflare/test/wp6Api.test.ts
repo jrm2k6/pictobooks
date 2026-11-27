@@ -1,4 +1,6 @@
 import { env } from "cloudflare:workers";
+import { PDFDocument, PDFName, PDFNumber, PageSizes } from "pdf-lib";
+import { mockCandidateSvg } from "../src/book-run/mockPageDrawing.js";
 import { applyD1Migrations, reset, type D1Migration } from "cloudflare:test";
 import {
   afterEach,
@@ -235,6 +237,474 @@ describe("WP6 authenticated pipeline API", () => {
       env as unknown as RuntimeEnv
     );
     expect(created?.status).toBe(201);
+  });
+
+  it("serves private printable PDFs only to the owner when explicitly enabled", async () => {
+    const { bookId, runId, pageId, candidateId } = await seedReviewablePage();
+    await setPrintableCandidate(pageId, MINI_PNGS[0]);
+    await api.reviewCandidate(owner, "printable-approval-001", bookId, pageId, {
+      candidateId,
+      decision: "approved",
+    });
+
+    const runUrl = `https://api.invalid/v1/books/${bookId}/runs/${runId}`;
+    const downloadUrl = `${runUrl}/printable-pdf`;
+    const runtime = env as unknown as RuntimeEnv;
+    const enabled = { ...runtime, PRINTABLE_PDF_ENABLED: "true" };
+    const request = async (url: string, userId = owner.userId) =>
+      new Request(url, {
+        headers: {
+          Authorization: `Bearer ${await signJwt(userId)}`,
+          Origin: "https://studio.pictobook.app",
+        },
+      });
+    const download = await request(downloadUrl);
+    expect(
+      (await handleApiRequest(new Request(downloadUrl), enabled))?.status
+    ).toBe(401);
+    expect((await handleApiRequest(download, runtime))?.status).toBe(404);
+    expect(
+      (
+        await handleApiRequest(
+          await request(downloadUrl, stranger.userId),
+          enabled
+        )
+      )?.status
+    ).toBe(404);
+    const response = await handleApiRequest(download, enabled);
+    expect(response?.status).toBe(200);
+    expect(response?.headers.get("Content-Type")).toBe("application/pdf");
+    expect(response?.headers.get("Content-Disposition")).toBe(
+      'attachment; filename="pictobook.pdf"'
+    );
+    expect(response?.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(response?.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://studio.pictobook.app"
+    );
+    expect(
+      (await PDFDocument.load(await response!.arrayBuffer())).getPageCount()
+    ).toBe(1);
+    const runRequest = await request(runUrl);
+    expect(
+      await (await handleApiRequest(runRequest, runtime))?.json()
+    ).toMatchObject({
+      printablePdfEnabled: false,
+    });
+    expect(
+      await (await handleApiRequest(runRequest, enabled))?.json()
+    ).toMatchObject({
+      printablePdfEnabled: true,
+    });
+  });
+
+  it("updates only owned primary page inclusion, validates the body and replays a setting without overwriting newer choices", async () => {
+    const { bookId, runId, pageId, candidateId } = await seedReviewablePage();
+    const approval = await api.reviewCandidate(
+      owner,
+      "approval-before-removal",
+      bookId,
+      pageId,
+      {
+        candidateId,
+        decision: "approved",
+      }
+    );
+    expect(
+      (await api.getBookRun(owner, bookId, runId)).body.pages
+    ).toMatchObject([{ pageId, included: true }]);
+    const update = async (
+      included: unknown,
+      key: string,
+      overrides: { ownerId?: string; bookId?: string; runId?: string } = {}
+    ) =>
+      handleApiRequest(
+        new Request(
+          `https://api.invalid/v1/books/${overrides.bookId ?? bookId}/runs/${overrides.runId ?? runId}/pages/${pageId}/inclusion`,
+          {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${await signJwt(overrides.ownerId ?? owner.userId)}`,
+              "Content-Type": "application/json",
+              "Idempotency-Key": key,
+            },
+            body: JSON.stringify({ included }),
+          }
+        ),
+        env as unknown as RuntimeEnv
+      );
+    expect((await update("false", "include-missing-bool"))?.status).toBe(400);
+    expect((await update(undefined, "include-missing-bool"))?.status).toBe(400);
+    expect(
+      (
+        await update(false, "stranger-page-inclusion", {
+          ownerId: stranger.userId,
+        })
+      )?.status
+    ).toBe(404);
+    const other = await seedIntakeRejectedPage();
+    expect(
+      (
+        await update(false, "wrong-book-page-inclusion", {
+          bookId: other.bookId,
+        })
+      )?.status
+    ).toBe(404);
+    expect(
+      (await update(false, "wrong-run-page-inclusion", { runId: other.runId }))
+        ?.status
+    ).toBe(404);
+
+    const remove = await update(false, "remove-page-inclusion");
+    expect(remove?.status).toBe(200);
+    expect(await remove?.json()).toEqual({ pageId, included: false });
+    expect(
+      (await api.getBookRun(owner, bookId, runId)).body.pages
+    ).toMatchObject([
+      {
+        pageId,
+        included: false,
+        approvedCandidateId: candidateId,
+        approvalSource: "human",
+      },
+    ]);
+    const restore = await update(true, "restore-page-inclusion");
+    expect(await restore?.json()).toEqual({ pageId, included: true });
+    expect(
+      await (await update(false, "remove-page-inclusion"))?.json()
+    ).toEqual({ pageId, included: false });
+    expect((await update(false, "restore-page-inclusion"))?.status).toBe(409);
+    expect(
+      (await api.getBookRun(owner, bookId, runId)).body.pages
+    ).toMatchObject([
+      {
+        pageId,
+        included: true,
+        approvedCandidateId: candidateId,
+        approvalSource: "human",
+      },
+    ]);
+    expect(
+      await env.PIPELINE_DB.prepare(
+        "SELECT review_id FROM reviews WHERE page_id = ?"
+      )
+        .bind(pageId)
+        .first("review_id")
+    ).toBe(approval.body.reviewId);
+    expect(launcher.started.size).toBe(0);
+  });
+
+  it("rolls back a page inclusion update if storing its idempotent response fails", async () => {
+    const { bookId, runId, pageId } = await seedReviewablePage();
+    const remove = () =>
+      api.setPageInclusion(
+        owner,
+        "remove-interrupted-page",
+        bookId,
+        runId,
+        pageId,
+        false
+      );
+    const db = env.PIPELINE_DB;
+    await db
+      .prepare(
+        `CREATE TRIGGER interrupt_inclusion_response
+       BEFORE UPDATE OF response_status ON api_idempotency
+       WHEN NEW.idempotency_key = 'remove-interrupted-page' AND NEW.response_status = 200
+       BEGIN SELECT RAISE(ABORT, 'test response failure'); END`
+      )
+      .run();
+
+    await expect(remove()).rejects.toThrow("test response failure");
+    expect(
+      await db
+        .prepare("SELECT included FROM pages WHERE page_id = ?")
+        .bind(pageId)
+        .first("included")
+    ).toBe(1);
+    expect(
+      await db
+        .prepare(
+          "SELECT response_status FROM api_idempotency WHERE idempotency_key = ?"
+        )
+        .bind("remove-interrupted-page")
+        .first()
+    ).toEqual({ response_status: null });
+
+    await db.prepare("DROP TRIGGER interrupt_inclusion_response").run();
+    const removed = await remove();
+    expect(removed.body).toEqual({ pageId, included: false });
+    await api.setPageInclusion(
+      owner,
+      "restore-interrupted-page",
+      bookId,
+      runId,
+      pageId,
+      true
+    );
+    expect(await remove()).toEqual(removed);
+    expect(
+      await db
+        .prepare("SELECT included FROM pages WHERE page_id = ?")
+        .bind(pageId)
+        .first("included")
+    ).toBe(1);
+  });
+
+  it("exports the latest live lineage in photo order and rejects direct derivative downloads", async () => {
+    const { bookId, runId, pageId, candidateId } = await seedReviewablePage();
+    const rootB = "page-alphabetically-first";
+    const child = "page-current-replacement";
+    const grandchild = "page-current-regeneration";
+    await env.PIPELINE_DB.prepare(
+      "UPDATE photos SET ordinal = 2 WHERE run_id = ?"
+    )
+      .bind(runId)
+      .run();
+    const rootBCandidate = await seedPrintablePage({
+      runId,
+      pageId: rootB,
+      ordinal: 1,
+    });
+    for (const [id, sourceId, sourceRunId, timestamp, expired] of [
+      [child, pageId, runId, "2026-11-10T11:00:00.000Z", false],
+      ["page-tied-sibling", pageId, runId, "2026-11-10T11:00:00.000Z", false],
+      [
+        "page-newer-but-expired",
+        pageId,
+        runId,
+        "2026-11-10T11:15:00.000Z",
+        true,
+      ],
+      [grandchild, child, child, "2026-11-10T11:30:00.000Z", false],
+    ] as const) {
+      await env.PIPELINE_DB.prepare(
+        "INSERT INTO book_runs VALUES (?, ?, 'partially_completed', 'pictobook-preschool-v0.1', 7000, 3000, ?, ?, ?)"
+      )
+        .bind(id, bookId, timestamp, timestamp, timestamp)
+        .run();
+      await seedPrintablePage({ runId: id, pageId: id, ordinal: 1 });
+      await env.PIPELINE_DB.prepare(
+        "INSERT INTO book_run_regenerations (new_run_id, source_run_id, source_page_id, requested_by, created_at, kind) VALUES (?, ?, ?, ?, ?, ?)"
+      )
+        .bind(
+          id,
+          sourceRunId,
+          sourceId,
+          owner.userId,
+          timestamp,
+          id === grandchild ? "candidate_regeneration" : "photo_replacement"
+        )
+        .run();
+      if (expired) {
+        await env.PIPELINE_DB.batch([
+          env.PIPELINE_DB.prepare(
+            "UPDATE photos SET source_artifact_id = NULL WHERE run_id = ?"
+          ).bind(id),
+          env.PIPELINE_DB.prepare(
+            `INSERT INTO upload_intents VALUES (?, ?, ?, ?, ?, ?, ?, 'image/png', 1, ?, ?, NULL, ?)`
+          ).bind(
+            id,
+            owner.userId,
+            bookId,
+            id,
+            `photo-${id}`,
+            `source:${id}`,
+            `uploads/${id}`,
+            "0".repeat(64),
+            timestamp,
+            timestamp
+          ),
+        ]);
+      }
+    }
+
+    await env.PIPELINE_DB.prepare(
+      `WITH RECURSIVE seq(n) AS (
+         SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 105
+       )
+       INSERT INTO book_runs
+       SELECT 'unrelated-draft-' || n, ?, 'created', 'pictobook-preschool-v0.1',
+         7000, 0, ?, ?, NULL
+       FROM seq`
+    )
+      .bind(bookId, now.toISOString(), now.toISOString())
+      .run();
+    const { body: defaultRuns } = await api.listBookRuns(owner, bookId);
+    expect(defaultRuns.runs).toHaveLength(100);
+    const { body: liveLineage } = await api.listBookRuns(owner, bookId, true);
+    expect(liveLineage.runs).toMatchObject([
+      { run_id: grandchild },
+      { run_id: child },
+      { run_id: "page-tied-sibling" },
+    ]);
+
+    await setPrintableCandidate(pageId, MINI_PNGS[0]);
+    await setPrintableCandidate(rootB, MINI_PNGS[1]);
+    await setPrintableCandidate(grandchild, MINI_PNGS[2]);
+    for (const [id, candidate] of [
+      [pageId, candidateId],
+      [rootB, rootBCandidate],
+    ]) {
+      await api.reviewCandidate(owner, `approve-${id}`, bookId, id, {
+        candidateId: candidate,
+        decision: "approved",
+      });
+    }
+    const runUrl = `https://api.invalid/v1/books/${bookId}/runs`;
+    const runtime = {
+      ...env,
+      PRINTABLE_PDF_ENABLED: "true",
+    } as unknown as RuntimeEnv;
+    const jwt = await signJwt(owner.userId);
+    const request = (path: string) =>
+      handleApiRequest(
+        new Request(`${runUrl}/${path}`, {
+          headers: { Authorization: `Bearer ${jwt}` },
+        }),
+        runtime
+      );
+
+    expect((await request(`${runId}/printable-pdf`))?.status).toBe(409);
+    await expect(
+      api.setPageInclusion(
+        owner,
+        "remove-derivative-slot",
+        bookId,
+        grandchild,
+        grandchild,
+        false
+      )
+    ).rejects.toMatchObject({ status: 404, code: "page_not_found" });
+    await api.setPageInclusion(
+      owner,
+      "remove-replaced-slot",
+      bookId,
+      runId,
+      pageId,
+      false
+    );
+    const retained = await request(`${runId}/printable-pdf`);
+    expect(retained?.status).toBe(200);
+    expect(
+      (await PDFDocument.load(await retained!.arrayBuffer())).getPageCount()
+    ).toBe(1);
+    await api.setPageInclusion(
+      owner,
+      "remove-last-slot",
+      bookId,
+      runId,
+      rootB,
+      false
+    );
+    expect((await request(`${runId}/printable-pdf`))?.status).toBe(409);
+    await api.setPageInclusion(
+      owner,
+      "restore-first-slot",
+      bookId,
+      runId,
+      rootB,
+      true
+    );
+    await api.setPageInclusion(
+      owner,
+      "restore-replaced-slot",
+      bookId,
+      runId,
+      pageId,
+      true
+    );
+    expect((await request(`${runId}/printable-pdf`))?.status).toBe(409);
+
+    await api.reviewCandidate(owner, "approve-grandchild", bookId, grandchild, {
+      candidateId: `candidate-${grandchild}-0-1`,
+      decision: "approved",
+    });
+    expect((await request(`${grandchild}/printable-pdf`))?.status).toBe(404);
+    expect(await (await request(grandchild))?.json()).toMatchObject({
+      printablePdfEnabled: false,
+    });
+    expect(await (await request(runId))?.json()).toMatchObject({
+      pages: [{ pageId: rootB }, { pageId }],
+    });
+    const response = await request(`${runId}/printable-pdf`);
+    expect(response?.status).toBe(200);
+    const pdf = await PDFDocument.load(await response!.arrayBuffer());
+    expect(
+      pdf.getPages().map(page => {
+        const [imageRef] = page.node
+          .Resources()!
+          .lookup(PDFName.of("XObject"))
+          .values();
+        const image = pdf.context.lookup(imageRef);
+        return {
+          size: [page.getWidth(), page.getHeight()],
+          imageWidth: image.dict
+            .lookup(PDFName.of("Width"), PDFNumber)
+            .asNumber(),
+        };
+      })
+    ).toEqual([
+      { size: PageSizes.Letter, imageWidth: 4 },
+      { size: PageSizes.Letter, imageWidth: 6 },
+    ]);
+  });
+
+  it("rejects automatic approval and prints the built-in local mock drawing", async () => {
+    const auto = await seedAutoApprovedPage();
+    const localRuntime = {
+      ...env,
+      LOCAL_CUSTOMER_API: "true",
+      PRINTABLE_PDF_ENABLED: "true",
+    } as unknown as RuntimeEnv;
+    const jwt = await signJwt(owner.userId);
+    const request = (bookId: string, runId: string) =>
+      handleApiRequest(
+        new Request(
+          `https://api.invalid/v1/books/${bookId}/runs/${runId}/printable-pdf`,
+          {
+            headers: { Authorization: `Bearer ${jwt}` },
+          }
+        ),
+        localRuntime
+      );
+    await setPrintableCandidate(auto.pageId, MINI_PNGS[0]);
+    expect(
+      await (await request(auto.bookId, auto.runId))?.json()
+    ).toMatchObject({ code: "printable_pdf_not_ready" });
+
+    const mock = await seedReviewablePage();
+    const generatedCandidateId = `candidate-${mock.pageId}-0-1`;
+    await env.PIPELINE_DB.prepare(
+      "UPDATE candidates SET candidate_id = ? WHERE candidate_id = ?"
+    )
+      .bind(generatedCandidateId, mock.candidateId)
+      .run();
+    await setPrintableCandidate(
+      mock.pageId,
+      new TextEncoder().encode(mockCandidateSvg(generatedCandidateId, 0)),
+      "image/svg+xml"
+    );
+    await api.reviewCandidate(
+      owner,
+      "approve-mock-001",
+      mock.bookId,
+      mock.pageId,
+      {
+        candidateId: generatedCandidateId,
+        decision: "approved",
+      }
+    );
+    const response = await request(mock.bookId, mock.runId);
+    expect(response?.status).toBe(200);
+    expect(
+      (await PDFDocument.load(await response!.arrayBuffer())).getPageCount()
+    ).toBe(1);
+    await env.PIPELINE_DB.prepare(
+      "UPDATE artifacts SET deleted_at = ? WHERE artifact_id = ?"
+    )
+      .bind(now.toISOString(), mock.artifactId)
+      .run();
+    expect((await request(mock.bookId, mock.runId))?.status).toBe(409);
   });
 
   it("returns CORS headers for allowed origins and handles preflight", async () => {
@@ -1121,6 +1591,121 @@ describe("WP6 authenticated pipeline API", () => {
     });
   });
 
+  it("reuses an approval across concurrent requests and preserves its original notes", async () => {
+    const { bookId, pageId, candidateId } = await seedReviewablePage();
+    const approve = (key: string, notes: string) =>
+      api.reviewCandidate(owner, key, bookId, pageId, {
+        candidateId,
+        decision: "approved",
+        notes,
+      });
+    const [first, second] = await Promise.all([
+      approve("approve-concurrent-001", "First request"),
+      approve("approve-concurrent-002", "Second request"),
+    ]);
+    expect(second).toEqual(first);
+    const original = await env.PIPELINE_DB.prepare(
+      "SELECT review_id, notes FROM reviews WHERE page_id = ?"
+    )
+      .bind(pageId)
+      .first();
+    expect(original).toMatchObject({ review_id: first.body.reviewId });
+    expect(["First request", "Second request"]).toContain(original?.notes);
+    expect(await approve("approve-concurrent-003", "Retry notes")).toEqual(
+      first
+    );
+    expect(
+      await env.PIPELINE_DB.prepare(
+        "SELECT review_id, notes FROM reviews WHERE page_id = ?"
+      )
+        .bind(pageId)
+        .first()
+    ).toEqual(original);
+    expect(await scalar("SELECT count(*) FROM reviews")).toBe(1);
+    expect(
+      await scalar(
+        "SELECT count(*) FROM operations WHERE operation_kind = 'review'"
+      )
+    ).toBe(1);
+    expect(
+      await scalar(
+        "SELECT count(*) FROM audit_events WHERE event_kind = 'candidate_reviewed'"
+      )
+    ).toBe(1);
+  });
+
+  it("recovers a previously stored approval before the page transition and rejects a conflicting candidate", async () => {
+    const { bookId, runId, pageId, candidateId } = await seedReviewablePage();
+    const alternative = "candidate-other";
+    await env.PIPELINE_DB.batch([
+      env.PIPELINE_DB.prepare(
+        `INSERT INTO candidates
+         SELECT ?, page_id, operation_id, NULL, 'initial', 2, NULL, clean_artifact_id, created_at
+         FROM candidates WHERE candidate_id = ?`
+      ).bind(alternative, candidateId),
+      env.PIPELINE_DB.prepare(
+        `INSERT INTO operations VALUES ('review:review-older-request', ?, ?, 'review', 'completed',
+          0, 0, '{}', NULL, ?, ?, ?)`
+      ).bind(
+        runId,
+        pageId,
+        now.toISOString(),
+        now.toISOString(),
+        now.toISOString()
+      ),
+      env.PIPELINE_DB.prepare(
+        `INSERT INTO reviews VALUES ('review-older-request', ?, ?, ?, 'approved', 'Original notes', ?)`
+      ).bind(pageId, candidateId, owner.userId, now.toISOString()),
+    ]);
+
+    await expect(
+      api.reviewCandidate(owner, "approve-conflicting-001", bookId, pageId, {
+        candidateId: alternative,
+        decision: "approved",
+      })
+    ).rejects.toMatchObject({ status: 409, code: "page_already_approved" });
+
+    const recovered = await api.reviewCandidate(
+      owner,
+      "approve-recovery-001",
+      bookId,
+      pageId,
+      {
+        candidateId,
+        decision: "approved",
+        notes: "Retry notes",
+      }
+    );
+    expect(recovered.body.reviewId).toBe("review-older-request");
+    expect(
+      await env.PIPELINE_DB.prepare(
+        "SELECT state, approval_source, approved_candidate_id FROM pages WHERE page_id = ?"
+      )
+        .bind(pageId)
+        .first()
+    ).toEqual({
+      state: "approved",
+      approval_source: "human",
+      approved_candidate_id: candidateId,
+    });
+    expect(
+      await scalar(
+        "SELECT count(*) FROM reviews WHERE notes = 'Original notes'"
+      )
+    ).toBe(1);
+    expect(await scalar("SELECT count(*) FROM reviews")).toBe(1);
+    expect(
+      await scalar(
+        "SELECT count(*) FROM operations WHERE operation_kind = 'review'"
+      )
+    ).toBe(1);
+    expect(
+      await scalar(
+        "SELECT count(*) FROM audit_events WHERE operation_id = 'review:review-older-request'"
+      )
+    ).toBe(1);
+  });
+
   it("lets a customer explicitly confirm an already auto-approved page as human-approved", async () => {
     const seeded = await seedAutoApprovedPage();
 
@@ -1403,6 +1988,92 @@ const digest = async (bytes: Uint8Array): Promise<string> => {
     value.toString(16).padStart(2, "0")
   ).join("");
 };
+
+const MINI_PNGS = [
+  "iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAAA2iEnWAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAC0lEQVQImWNgwAIAABUAAbJuDnMAAAAASUVORK5CYII=",
+  "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAFCAIAAADtz9qMAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWNgoBAAAABBAAFDlc3UAAAAAElFTkSuQmCC",
+  "iVBORw0KGgoAAAANSUhEUgAAAAYAAAAHCAIAAACk8qu6AAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADElEQVQImWNgGAQAAACFAAFDsYaHAAAAAElFTkSuQmCC",
+].map(png => Uint8Array.from(atob(png), char => char.charCodeAt(0)));
+
+async function seedPrintablePage({
+  runId,
+  pageId,
+  ordinal,
+}: {
+  runId: string;
+  pageId: string;
+  ordinal: number;
+}) {
+  const photoId = `photo-${pageId}`;
+  const candidateId = `candidate-${pageId}-0-1`;
+  const artifactId = `clean:${candidateId}`;
+  const operationId = `generate:${pageId}`;
+  const time = now.toISOString();
+  const db = env.PIPELINE_DB;
+  await db.batch([
+    db
+      .prepare("INSERT INTO photos VALUES (?, ?, ?, ?, 'accepted', ?)")
+      .bind(photoId, runId, ordinal, `source:${photoId}`, time),
+    db
+      .prepare(
+        `INSERT INTO pages (page_id, run_id, photo_id, state, initial_candidate_count,
+          repair_round_count, approved_candidate_id, approval_source, terminal_reason, created_at, updated_at)
+         VALUES (?, ?, ?, 'created', 0, 0, NULL, NULL, NULL, ?, ?)`
+      )
+      .bind(pageId, runId, photoId, time, time),
+    db
+      .prepare(
+        "INSERT INTO operations VALUES (?, ?, ?, 'generate_initial', 'completed', 0, 1, '{}', NULL, ?, ?, ?)"
+      )
+      .bind(operationId, runId, pageId, time, time, time),
+    db
+      .prepare(
+        "INSERT INTO candidates VALUES (?, ?, ?, NULL, 'initial', 1, NULL, ?, ?)"
+      )
+      .bind(candidateId, pageId, operationId, artifactId, time),
+    db
+      .prepare(
+        "INSERT INTO artifacts VALUES (?, ?, ?, ?, ?, 'candidate_clean', 'test', ?, 0, 'image/png', 'mock', 'mock-v1', 'derived', NULL, ?)"
+      )
+      .bind(
+        artifactId,
+        runId,
+        pageId,
+        operationId,
+        `test/print/${artifactId}`,
+        "0".repeat(64),
+        time
+      ),
+    ...["analyzing", "generating", "print_qa", "needs_human_review"].map(
+      state =>
+        db
+          .prepare("UPDATE pages SET state = ? WHERE page_id = ?")
+          .bind(state, pageId)
+    ),
+  ]);
+  return candidateId;
+}
+
+async function setPrintableCandidate(
+  pageId: string,
+  bytes: Uint8Array,
+  mimeType = "image/png"
+) {
+  const artifact = await env.PIPELINE_DB.prepare(
+    "SELECT a.artifact_id, a.object_key FROM artifacts a JOIN candidates c ON c.clean_artifact_id = a.artifact_id WHERE c.page_id = ?"
+  )
+    .bind(pageId)
+    .first<{ artifact_id: string; object_key: string }>();
+  const sha = await digest(bytes);
+  await env.PIPELINE_ARTIFACTS.put(artifact!.object_key, bytes, {
+    httpMetadata: { contentType: mimeType },
+  });
+  await env.PIPELINE_DB.prepare(
+    "UPDATE artifacts SET sha256 = ?, byte_size = ?, mime_type = ? WHERE artifact_id = ?"
+  )
+    .bind(sha, bytes.length, mimeType, artifact!.artifact_id)
+    .run();
+}
 
 const scalar = async (query: string): Promise<number> => {
   const row =

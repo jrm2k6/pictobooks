@@ -8,7 +8,8 @@ status: accepted
 
 A Book Run must resume safely across retries and partial page failures. We decided that one Cloudflare Workflow coordinates a Book Run, while D1 owns state and cost limits, R2 owns immutable artifacts, and bounded semantic repair remains distinct from infrastructure retries. This implements the retry policy in [ADR 0001](./0001-bounded-durable-pipeline-jobs.md).
 
-WP5 implements the durable production control plane for a Book Run. A single
+The durable Book Run workflow (work package WP5) implements the production
+control plane for a Book Run. A single
 Cloudflare Workflow owns the Book Run and advances each Page through generation,
 Print QA, Style QA, bounded repair, and a terminal state. D1 is authoritative
 for state and cost; R2 is authoritative for immutable artifacts. The Node image

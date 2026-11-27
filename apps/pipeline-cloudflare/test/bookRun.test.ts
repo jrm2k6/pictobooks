@@ -7,9 +7,9 @@ import {
   type ImageOperationInput,
   type ImageProcessor,
   type WorkflowSteps,
-} from "../src/wp5/bookRun.js";
-import { createSyntheticBookRun } from "../src/wp5/syntheticBookRun.js";
-import { LocalMockImageProcessor } from "../src/wp5/localMockImageProcessor.js";
+} from "../src/book-run/bookRun.js";
+import { createSyntheticBookRun } from "../src/book-run/syntheticBookRun.js";
+import { LocalMockImageProcessor } from "../src/book-run/localMockImageProcessor.js";
 import { R2ArtifactStore } from "../src/storage/r2ArtifactStore.js";
 import { objectKeys } from "../src/domain/objectKeys.js";
 
@@ -93,7 +93,7 @@ class FakeImageProcessor implements ImageProcessor {
   }
 }
 
-describe("WP5 ProductionBookRun", () => {
+describe("Durable Book Run workflow", () => {
   beforeEach(async () => {
     await reset();
     const migrations = Reflect.get(env, "TEST_MIGRATIONS") as D1Migration[];

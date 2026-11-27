@@ -53,7 +53,7 @@
   candidates and writes deterministic QA data through local R2. Other modes
   use `ContainerImageProcessor`.
 - Mock generation already creates deterministic SVG candidates and deterministic
-  Style QA scores in `src/wp5/bookRun.ts`. Preserve this behavior for local runs.
+  Style QA scores in `src/book-run/bookRun.ts`. Preserve this behavior for local runs.
 - Local artifact access checks book ownership and streams the artifact through
   the Worker; it does not expose the local bucket publicly. Non-local access
   retains the signed R2 URL path.

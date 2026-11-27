@@ -125,10 +125,12 @@ export class JwtAuthenticator {
   }
 }
 
-export const sha256Hex = async (value: string): Promise<string> => {
+export const sha256Hex = async (
+  value: string | Uint8Array
+): Promise<string> => {
   const digest = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(value)
+    typeof value === "string" ? new TextEncoder().encode(value) : value
   );
   return Array.from(new Uint8Array(digest), byte =>
     byte.toString(16).padStart(2, "0")

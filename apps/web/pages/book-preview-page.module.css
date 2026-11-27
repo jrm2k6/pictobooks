@@ -44,30 +44,103 @@
 /* ── Spread ────────────────────────────────────────────────────────────── */
 
 .spread {
+  position: relative;
+  isolation: isolate;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 54rem;
+  margin: 0 auto 16px;
+  perspective: 1400px;
 }
 
-@media (max-width: 560px) {
-  .spread {
-    grid-template-columns: 1fr;
+.sheet {
+  aspect-ratio: 8.5 / 11;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+  box-shadow: 0 3px 10px oklch(from var(--color-navy) l c h / 0.1);
+}
+
+.leftSheet {
+  position: relative;
+  border-radius: var(--radius-lg) 2px 2px var(--radius-lg);
+  background: linear-gradient(
+    to left,
+    var(--color-border),
+    var(--color-surface) 6%
+  );
+}
+
+.referenceLabel {
+  position: absolute;
+  inset-inline-start: 8px;
+  inset-block-end: 8px;
+  max-inline-size: calc(100% - 16px);
+  box-sizing: border-box;
+  padding: 4px 7px;
+  border-radius: var(--radius-md);
+  background: var(--color-navy);
+  color: var(--color-surface);
+  font-family: var(--font-body);
+  font-size: clamp(0.625rem, 1.7vw, 0.75rem);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.rightSheet {
+  border-radius: 2px var(--radius-lg) var(--radius-lg) 2px;
+  border-inline-start: 0;
+}
+
+.leaf {
+  position: absolute;
+  z-index: 1;
+  inset: 0 0 0 50%;
+  transform-style: preserve-3d;
+  transform-origin: left center;
+  animation-duration: 280ms;
+  animation-timing-function: cubic-bezier(0.77, 0, 0.175, 1);
+  animation-fill-mode: both;
+  pointer-events: none;
+}
+
+.leafForward {
+  animation-name: turnPage;
+}
+
+.leafBackward {
+  animation-name: turnPage;
+  animation-direction: reverse;
+}
+
+.leafFace {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+}
+
+.leafBack {
+  transform: rotateY(180deg);
+}
+
+@keyframes turnPage {
+  from {
+    transform: rotateY(0deg);
+  }
+
+  to {
+    transform: rotateY(-180deg);
   }
 }
 
-.spreadPage {
-  aspect-ratio: 3 / 4;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+@media (prefers-reduced-motion: reduce) {
+  .leaf {
+    animation-duration: 1ms;
+  }
 }
 
 .pageImage {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -76,7 +149,7 @@
 .pagePlaceholder {
   width: 100%;
   height: 100%;
-  background: var(--color-border);
+  background: oklch(from var(--color-border) l c h / 0.4);
 }
 
 /* ── Controls ──────────────────────────────────────────────────────────── */
@@ -104,13 +177,13 @@
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  padding: 6px 4px;
+  padding: 10px 4px;
 
-  &:hover:not(:disabled) {
+  &:hover:not([aria-disabled="true"]) {
     color: var(--color-text);
   }
 
-  &:disabled {
+  &[aria-disabled="true"] {
     opacity: 0.4;
     cursor: not-allowed;
   }
@@ -147,8 +220,13 @@
   transition: filter 0.15s;
   white-space: nowrap;
 
-  &:hover {
+  &:hover:not(:disabled) {
     filter: brightness(1.08);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
 }
 
@@ -168,4 +246,10 @@
   &:hover {
     background: oklch(from var(--color-navy) l c h / 0.06);
   }
+}
+
+.downloadMessage {
+  color: var(--color-text);
+  font-family: var(--font-body);
+  margin-top: 12px;
 }

@@ -249,7 +249,15 @@ paths:
       operationId: listBookRuns
       summary: List generation attempts for a book
       description: >-
-        Customer screen: `library`; supports resuming a run.
+        By default returns the 100 latest runs for resuming a book. Live
+        lineage mode supports review and preview across the book's history.
+      parameters:
+        - in: query
+          name: lineage
+          schema:
+            type: string
+            const: live
+          description: Return all regeneration and replacement runs whose required uploads have not expired.
       responses:
         "200":
           description: Book runs, newest first
@@ -331,6 +339,101 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/BookRunDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /v1/books/{bookId}/runs/{runId}/printable-pdf:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+      - $ref: "#/components/parameters/RunId"
+    get:
+      tags: [Books]
+      operationId: downloadPrintablePdf
+      summary: Download the approved book as a printable PDF
+      description: >-
+        Available at alpha when the primary run reports
+        `printablePdfEnabled`. Resolves the current page in each slot at
+        request time and requires explicit customer approval for every included page.
+        The download uses the same photo order as the preview.
+      responses:
+        "200":
+          description: Private US Letter PDF attachment
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: private, no-store
+            Content-Disposition:
+              schema:
+                type: string
+                const: attachment; filename="pictobook.pdf"
+          content:
+            application/pdf: {}
+        "400":
+          description: Invalid book or run identifier
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: Missing, invalid, or expired authentication
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: Download is disabled, or the primary run is absent or belongs to another customer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: The book is not ready to print or the export exceeds the supported size
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /v1/books/{bookId}/runs/{runId}/pages/{pageId}/inclusion:
+    parameters:
+      - $ref: "#/components/parameters/BookId"
+      - $ref: "#/components/parameters/RunId"
+      - $ref: "#/components/parameters/PageId"
+    patch:
+      tags: [Review]
+      operationId: setPageInclusion
+      summary: Remove or restore a page in the book
+      description: >-
+        Applies to an original page in a primary run owned by the customer.
+        Generated versions inherit the original slot's inclusion. Removed
+        pages retain their candidates and reviews for later restoration.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [included]
+              properties:
+                included:
+                  type: boolean
+      responses:
+        "200":
+          description: Persisted page selection
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [pageId, included]
+                properties:
+                  pageId:
+                    type: string
+                  included:
+                    type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -527,7 +630,12 @@ paths:
       summary: Record a customer decision for one exact candidate revision
       description: >-
         Customer screen: `review` (Review a page). Approving/keeping or
-        rejecting must reference the exact candidate ID.
+        rejecting must reference the exact candidate ID. Repeating approval
+        for the same candidate returns its existing approval, including
+        when a retry uses a new idempotency key. Bulk approval may also send
+        `originalPageId`; when present, the Worker accepts the review only if
+        that owned slot remains included and still resolves to this page at
+        write time.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -546,6 +654,12 @@ paths:
                 notes:
                   type: string
                   maxLength: 2000
+                originalPageId:
+                  type: string
+                  description: >-
+                    Optional bulk-selection precondition. For approval only,
+                    requires this original slot to remain included and resolve
+                    to the requested page when the review is committed.
       responses:
         "201":
           description: Review recorded
@@ -1065,7 +1179,14 @@ components:
       allOf:
         - $ref: "#/components/schemas/RunSummary"
         - type: object
-          required: [bookId, pages, regenerationKind, uploadExpired]
+          required:
+            [
+              bookId,
+              pages,
+              regenerationKind,
+              uploadExpired,
+              printablePdfEnabled,
+            ]
           properties:
             bookId:
               type: string
@@ -1087,6 +1208,9 @@ components:
                 intent to be complete, so it can never launch. A client
                 resolving a page slot's current page should skip any run
                 with `uploadExpired: true`.
+            printablePdfEnabled:
+              type: boolean
+              description: The alpha printable PDF endpoint is enabled for this primary run.
             pages:
               type: array
               items:
@@ -1103,6 +1227,10 @@ components:
       type: object
       required: [pageId, photoId, state, replacesPageId, candidates]
       properties:
+        included:
+          type: boolean
+          default: true
+          description: Inclusion in the book, controlled by the original page slot.
         pageId:
           type: string
         photoId:

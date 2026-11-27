@@ -98,7 +98,8 @@ export const handleApiRequest = async (
       },
       localCustomerApi,
       parsePositiveInteger(env.MIN_PHOTOS_PER_RUN) ?? MIN_PHOTOS,
-      parsePositiveInteger(env.MAX_PHOTOS_PER_RUN) ?? MAX_PHOTOS_PER_RUN
+      parsePositiveInteger(env.MAX_PHOTOS_PER_RUN) ?? MAX_PHOTOS_PER_RUN,
+      env.PRINTABLE_PDF_ENABLED === "true"
     );
     const response = await route(request, url, principal, api);
     if (response instanceof Response) return addCors(response, cors);
@@ -222,7 +223,11 @@ const route = async (
 
   const bookRuns = url.pathname.match(/^\/v1\/books\/([^/]+)\/runs$/);
   if (request.method === "GET" && bookRuns) {
-    return api.listBookRuns(principal, safePathId(bookRuns[1]));
+    return api.listBookRuns(
+      principal,
+      safePathId(bookRuns[1]),
+      url.searchParams.get("lineage") === "live"
+    );
   }
 
   if (request.method === "GET" && url.pathname === "/v1/canonical-references") {
@@ -269,6 +274,35 @@ const route = async (
     return api.getBookRun(principal, safePathId(run[1]), safePathId(run[2]));
   }
 
+  const pageInclusion = url.pathname.match(
+    /^\/v1\/books\/([^/]+)\/runs\/([^/]+)\/pages\/([^/]+)\/inclusion$/
+  );
+  if (request.method === "PATCH" && pageInclusion) {
+    const body = await readJson<{ included?: boolean }>(request);
+    if (typeof body?.included !== "boolean") {
+      throw new ApiProblem(400, "invalid_page_inclusion");
+    }
+    return api.setPageInclusion(
+      principal,
+      idempotencyKey(request),
+      safePathId(pageInclusion[1]),
+      safePathId(pageInclusion[2]),
+      safePathId(pageInclusion[3]),
+      body.included
+    );
+  }
+
+  const printablePdf = url.pathname.match(
+    /^\/v1\/books\/([^/]+)\/runs\/([^/]+)\/printable-pdf$/
+  );
+  if (request.method === "GET" && printablePdf) {
+    return api.downloadPrintablePdf(
+      principal,
+      safePathId(printablePdf[1]),
+      safePathId(printablePdf[2])
+    );
+  }
+
   const start = url.pathname.match(
     /^\/v1\/books\/([^/]+)\/runs\/([^/]+)\/start$/
   );
@@ -290,8 +324,15 @@ const route = async (
       candidateId?: string;
       decision?: "approved" | "rejected" | "changes_requested";
       notes?: string;
+      originalPageId?: string;
     }>(request);
     if (!body.candidateId || !body.decision) {
+      throw new ApiProblem(400, "invalid_review");
+    }
+    if (
+      body.originalPageId !== undefined &&
+      (typeof body.originalPageId !== "string" || body.decision !== "approved")
+    ) {
       throw new ApiProblem(400, "invalid_review");
     }
     return api.reviewCandidate(
@@ -303,6 +344,10 @@ const route = async (
         candidateId: safePathId(body.candidateId),
         decision: body.decision,
         notes: body.notes,
+        originalPageId:
+          body.originalPageId === undefined
+            ? undefined
+            : safePathId(body.originalPageId),
       }
     );
   }
@@ -477,6 +522,7 @@ type RuntimeSecrets = {
   GEMINI_STYLE_JUDGE_COST_MICROS?: string;
   PIPELINE_INITIAL_CANDIDATE_COUNT?: string;
   LOCAL_CUSTOMER_API?: string;
+  PRINTABLE_PDF_ENABLED?: string;
   MIN_PHOTOS_PER_RUN?: string;
   MAX_PHOTOS_PER_RUN?: string;
 };

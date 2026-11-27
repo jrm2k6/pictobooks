@@ -29,8 +29,7 @@ export function ProcessingPage() {
 
   const totalPages = run?.totalPageCount ?? 0;
   const readyPages = run?.readyPageCount ?? 0;
-  const progress =
-    totalPages > 0 ? Math.round((readyPages / totalPages) * 100) : 0;
+  const progress = totalPages > 0 ? readyPages / totalPages : 0;
   const isFailed = run ? TERMINAL_FAILED.has(run.status) : false;
 
   return (
@@ -86,12 +85,12 @@ export function ProcessingPage() {
                 role="progressbar"
                 aria-label="Book creation progress"
                 aria-valuemin={0}
-                aria-valuemax={totalPages}
-                aria-valuenow={readyPages}
+                aria-valuemax={totalPages || undefined}
+                aria-valuenow={totalPages ? readyPages : undefined}
               >
                 <div
                   className={styles.progressFill}
-                  style={{ width: totalPages > 0 ? `${progress}%` : "0%" }}
+                  style={{ transform: `scaleX(${progress})` }}
                 />
               </div>
             </div>
@@ -99,10 +98,6 @@ export function ProcessingPage() {
               <span className={styles.statusDot} aria-hidden="true" />
               In progress
             </span>
-          </div>
-
-          <div className={styles.spinner} aria-hidden="true">
-            <div className={styles.spinnerRing} />
           </div>
 
           <div className={styles.callout} role="status">

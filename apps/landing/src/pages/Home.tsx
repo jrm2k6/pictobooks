@@ -133,12 +133,9 @@ function RevealSection({
   return (
     <div
       ref={ref}
-      className={className}
-      style={{
-        opacity: visible ? 1 : 0,
-        transform: visible ? "translateY(0)" : "translateY(28px)",
-        transition: `opacity 0.65s ease ${delay}ms, transform 0.65s ease ${delay}ms`,
-      }}
+      className={`reveal-section ${className}`}
+      data-visible={visible}
+      style={{ transitionDelay: `${delay}ms` }}
     >
       {children}
     </div>
@@ -382,9 +379,12 @@ export default function Home() {
             className="btn-coral rounded-full px-5 py-2 text-sm font-bold"
             onClick={e => {
               e.preventDefault();
-              document
-                .getElementById("waitlist")
-                ?.scrollIntoView({ behavior: "smooth" });
+              const reduceMotion = window.matchMedia(
+                "(prefers-reduced-motion: reduce)"
+              ).matches;
+              document.getElementById("waitlist")?.scrollIntoView({
+                behavior: reduceMotion ? "instant" : "smooth",
+              });
             }}
           >
             Join Waitlist
@@ -635,14 +635,14 @@ export default function Home() {
               ].map(step => (
                 <RevealSection key={step.num} delay={step.delay}>
                   <div
-                    className="rounded-2xl overflow-hidden group hover:scale-[1.02] transition-transform duration-300"
+                    className="step-card rounded-2xl overflow-hidden transition-transform duration-300"
                     style={{ background: "oklch(0.28 0.04 255)" }}
                   >
                     <div className="aspect-square overflow-hidden">
                       <img
                         src={step.image}
                         alt={step.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        className="step-card-image w-full h-full object-cover transition-transform duration-500"
                         width={800}
                         height={800}
                         loading="lazy"

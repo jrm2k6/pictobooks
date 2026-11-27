@@ -24,6 +24,7 @@
     "wrangler": "4.157.0"
   },
   "dependencies": {
-    "aws4fetch": "1.0.20"
+    "aws4fetch": "1.0.20",
+    "pdf-lib": "1.17.1"
   }
 }

@@ -209,5 +209,6 @@ bindings, and secrets are described in the
 - [OpenAPI specification](docs/customer-api.openapi.yaml)
 - [Customer screen-to-endpoint map](docs/customer-screen-api-map.yaml)
 - [Customer UI storybook](docs/customer-product-storybook/README.md)
+- [Digital book alpha and paid beta](docs/superpowers/specs/2026-11-23-digital-book-alpha.md)
 - [Cloudflare dashboard visual review gallery](docs/ui-review/wp7/index.html)
 - [Release and versioning policy](docs/releases.md)
