@@ -28,6 +28,7 @@ describe("reconcilePageSlots", () => {
     expect(result.slots).toEqual([
       {
         originalPageId: "page-1",
+        included: true,
         currentRunId: "run-primary",
         currentPageId: "page-1",
         currentPage: primaryRun.pages[0],
@@ -35,6 +36,7 @@ describe("reconcilePageSlots", () => {
       },
       {
         originalPageId: "page-2",
+        included: true,
         currentRunId: "run-primary",
         currentPageId: "page-2",
         currentPage: primaryRun.pages[1],
@@ -106,6 +108,7 @@ describe("reconcilePageSlots", () => {
     const result = reconcilePageSlots({ primaryRun, otherRuns: [regenRun] });
     expect(result.slots[0]).toMatchObject({
       originalPageId: "page-1",
+      included: true,
       currentRunId: "run-regen",
       currentPageId: "regen-page-1",
     });
@@ -154,6 +157,7 @@ describe("reconcilePageSlots", () => {
     });
     expect(result.slots[0]).toMatchObject({
       originalPageId: "page-1",
+      included: true,
       currentRunId: "run-regen-again",
       currentPageId: "regen-page-1",
     });
@@ -202,6 +206,7 @@ describe("reconcilePageSlots", () => {
     // live replacement to fall back to.
     expect(result.slots[0]).toMatchObject({
       originalPageId: "page-1",
+      included: true,
       currentRunId: "run-primary",
       currentPageId: "page-1",
     });
@@ -226,6 +231,46 @@ describe("canContinueReview", () => {
     expect(
       canContinueReview([{ currentPage: { state: "intake_rejected" } }])
     ).toBe(false);
+  });
+
+  it("ignores an excluded slot, preserves root inclusion through a replacement, and requires at least one included page", () => {
+    const original = page("page-1", {
+      approvalSource: "human",
+      included: false,
+    });
+    const approved = page("page-2", { approvalSource: "human" });
+    const primaryRun = run("run-primary", "2026-11-21T00:00:00Z", [
+      original,
+      approved,
+    ]);
+    const replacement = page("replacement", {
+      state: "needs_human_review",
+      replacesPageId: original.pageId,
+      included: true,
+    });
+    const otherRuns = [
+      run(
+        "run-other",
+        "2026-11-22T00:00:00Z",
+        [replacement],
+        "photo_replacement"
+      ),
+    ];
+    const { slots } = reconcilePageSlots({ primaryRun, otherRuns });
+    expect(slots[0]).toMatchObject({
+      included: false,
+      currentPageId: "replacement",
+    });
+    expect(canContinueReview(slots)).toBe(true);
+    expect(canContinueReview([slots[0]])).toBe(false);
+    const restored = reconcilePageSlots({
+      primaryRun: {
+        ...primaryRun,
+        pages: [{ ...original, included: true }, approved],
+      },
+      otherRuns,
+    });
+    expect(canContinueReview(restored.slots)).toBe(false);
   });
 
   it("is false when every page is approved but only by automatic QA, not an explicit human decision", () => {

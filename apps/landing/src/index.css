@@ -150,11 +150,14 @@
     font-family: "Plus Jakarta Sans", sans-serif;
     font-weight: 700;
     letter-spacing: -0.01em;
-    transition: all 0.2s ease;
+    transition:
+      background-color 0.2s ease,
+      transform 0.2s ease,
+      box-shadow 0.2s ease,
+      opacity 0.2s ease;
   }
-  .btn-coral:hover {
+  .btn-coral:hover:not(:disabled) {
     background-color: oklch(0.58 0.18 30);
-    transform: translateY(-1px);
     box-shadow: 0 8px 24px oklch(0.65 0.18 30 / 0.35);
   }
 
@@ -164,11 +167,27 @@
     color: white;
     font-family: "Plus Jakarta Sans", sans-serif;
     font-weight: 700;
-    transition: all 0.2s ease;
+    transition:
+      background-color 0.2s ease,
+      transform 0.2s ease;
   }
-  .btn-navy:hover {
+  .btn-navy:hover:not(:disabled) {
     background-color: oklch(0.28 0.04 255);
-    transform: translateY(-1px);
+  }
+
+  @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+    .btn-coral:hover:not(:disabled),
+    .btn-navy:hover:not(:disabled) {
+      transform: translateY(-1px);
+    }
+
+    .step-card:hover {
+      transform: scale(1.02);
+    }
+
+    .step-card:hover .step-card-image {
+      transform: scale(1.05);
+    }
   }
 
   /* Step number badge */
@@ -179,6 +198,19 @@
     color: oklch(0.65 0.18 30);
     line-height: 1;
   }
+}
+
+.reveal-section {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 0.65s ease,
+    transform 0.65s ease;
+}
+
+.reveal-section[data-visible="true"] {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 /* Scroll reveal animation */
@@ -248,4 +280,24 @@
 
 .float-anim {
   animation: float 4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-section,
+  .reveal-section[data-visible="true"] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .fade-up,
+  .sparkle,
+  .blob-morph,
+  .float-anim {
+    animation: none;
+  }
+
+  .blob-morph {
+    border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+  }
 }

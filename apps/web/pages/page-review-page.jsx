@@ -1,7 +1,13 @@
-import React, { useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { AppShell } from "../app-shell.jsx";
-import { usePageReview } from "../hooks/use-page-review.js";
+import {
+  canApprovePage,
+  displayCandidate,
+  sameApprovalTarget,
+  usePageReview,
+} from "../hooks/use-page-review.js";
+import { includedPageSlots } from "../hooks/reconcile-page-slots.js";
 import { useArtifactAccess } from "../hooks/use-artifact-access.js";
 import styles from "./page-review-page.module.css";
 
@@ -23,52 +29,6 @@ const ACTIVE_PAGE_STATES = new Set([
   "repairing",
 ]);
 
-const NEEDS_ATTENTION_STATES = new Set([
-  "needs_human_review",
-  "rejected",
-  "provider_failed",
-  "budget_exhausted",
-  "intake_rejected",
-  "intake_needs_review",
-]);
-
-/** Highest styleQa.score wins — same selection rule use-page-review.js's
- * tryAgainMutation uses when it has to pick a candidate to reject. */
-function pickBestCandidate(candidates) {
-  if (!candidates?.length) return null;
-  return candidates.reduce((best, candidate) =>
-    (candidate.styleQa?.score ?? -Infinity) > (best.styleQa?.score ?? -Infinity)
-      ? candidate
-      : best
-  ).candidateId;
-}
-
-/** The candidate this screen should display for a page: the one the
- * customer already approved, or (if no decision has been made yet) the
- * best-scoring one — matching the candidate `tryAgain` would reject. */
-function displayCandidate(page) {
-  if (!page.candidates?.length) return null;
-  const candidateId =
-    page.approvedCandidateId ?? pickBestCandidate(page.candidates);
-  return page.candidates.find(c => c.candidateId === candidateId) ?? null;
-}
-
-function statusPillFor(state, approvalSource) {
-  if (ACTIVE_PAGE_STATES.has(state)) {
-    return { label: "Making a new version…", tone: styles.pillPending };
-  }
-  if (state === "approved" && approvalSource === "human") {
-    return { label: "Kept", tone: styles.pillReady };
-  }
-  if (state === "approved") {
-    return { label: "Ready to keep", tone: styles.pillReady };
-  }
-  if (NEEDS_ATTENTION_STATES.has(state)) {
-    return { label: "Needs a change", tone: styles.pillAttention };
-  }
-  return { label: state, tone: "" };
-}
-
 /**
  * Step 5 (post-creation) — Review each page.
  * Grid-hub + inline detail: the grid is the landing view, opening a card
@@ -81,9 +41,64 @@ export function PageReviewPage() {
   const navigate = useNavigate();
   const review = usePageReview(bookId, runId);
   const [selectedOriginalPageId, setSelectedOriginalPageId] = useState(null);
+  const [selection, setSelection] = useState(null);
+  const readyBySlot = new Map(
+    review.readyApprovals.map(target => [target.originalPageId, target])
+  );
+  const selectedTargets =
+    selection === null
+      ? []
+      : review.readyApprovals.filter(target =>
+          sameApprovalTarget(target, selection.get(target.originalPageId))
+        );
 
   const selectedSlot =
     review.slots.find(s => s.originalPageId === selectedOriginalPageId) ?? null;
+
+  const includedSlots = includedPageSlots(review.slots);
+  const includedCount = includedSlots.length;
+  const remaining = includedSlots.filter(
+    ({ currentPage }) =>
+      currentPage.state !== "approved" || currentPage.approvalSource !== "human"
+  ).length;
+  const continueReason = review.isBulkApproving
+    ? "Wait for page approvals to finish."
+    : review.canContinue
+      ? null
+      : includedCount === 0
+        ? "Keep at least one page to continue."
+        : `Approve or remove the remaining ${remaining} ${remaining === 1 ? "page" : "pages"} to continue.`;
+
+  function toggleSelection(target) {
+    setSelection(previous => {
+      if (!previous) return previous;
+      const next = new Map(previous);
+      if (sameApprovalTarget(target, next.get(target.originalPageId))) {
+        next.delete(target.originalPageId);
+      } else {
+        next.set(target.originalPageId, target);
+      }
+      return next;
+    });
+  }
+
+  async function approveSelection() {
+    if (review.isBulkApproving || selectedTargets.length === 0) return;
+    try {
+      const result = await review.approveSelectedPages(selectedTargets);
+      setSelection(
+        result.failedPageIds.length
+          ? new Map(
+              selectedTargets
+                .filter(target => result.failedPageIds.includes(target.pageId))
+                .map(target => [target.originalPageId, target])
+            )
+          : null
+      );
+    } catch {
+      // Keep the selection so the user can retry after the preflight error.
+    }
+  }
 
   function handleContinue() {
     navigate({ to: "/books/new/preview", search: { bookId, runId } });
@@ -100,9 +115,8 @@ export function PageReviewPage() {
         </h1>
         {!selectedSlot && (
           <p className={styles.lead}>
-            Keep a page as-is, ask for another version, or replace a photo that
-            didn't work out. Every page needs a decision before you can
-            continue.
+            Approve the pages you want to keep, or remove them from the book.
+            You can add removed pages back any time during review.
           </p>
         )}
       </header>
@@ -120,9 +134,15 @@ export function PageReviewPage() {
         </div>
       )}
 
+      {review.isError && review.slots.length > 0 && (
+        <p className={styles.capBanner} role="alert">
+          Couldn’t refresh your pages. Showing the last loaded version.
+        </p>
+      )}
+
       {review.isLoading ? (
         <p className={styles.loading}>Loading your pages…</p>
-      ) : review.isError ? (
+      ) : review.isError && review.slots.length === 0 ? (
         <p className={styles.errorMsg} role="alert">
           Something went wrong loading this book. Try reloading the page.
         </p>
@@ -134,28 +154,60 @@ export function PageReviewPage() {
         />
       ) : (
         <>
-          <div className={styles.grid} aria-label="Book pages">
-            {review.slots.map(slot => (
-              <PageCard
-                key={slot.originalPageId}
-                slot={slot}
-                onOpen={() => setSelectedOriginalPageId(slot.originalPageId)}
-              />
-            ))}
+          <BulkApprovalAction
+            review={review}
+            selecting={selection !== null}
+            selectedCount={selectedTargets.length}
+            onStart={() => setSelection(new Map())}
+            onCancel={() => setSelection(null)}
+            onApprove={approveSelection}
+          />
+          <div
+            className={styles.grid}
+            aria-label={selection ? "Select pages to approve" : "Book pages"}
+          >
+            {review.slots.map((slot, index) => {
+              const target = readyBySlot.get(slot.originalPageId);
+              return (
+                <PageCard
+                  key={slot.originalPageId}
+                  slot={slot}
+                  pageNumber={index + 1}
+                  selecting={selection !== null}
+                  selected={Boolean(
+                    target &&
+                      sameApprovalTarget(
+                        target,
+                        selection?.get(slot.originalPageId)
+                      )
+                  )}
+                  disabled={
+                    review.isBulkApproving || Boolean(selection && !target)
+                  }
+                  onOpen={() => {
+                    if (selection) {
+                      if (target) toggleSelection(target);
+                    } else {
+                      setSelectedOriginalPageId(slot.originalPageId);
+                    }
+                  }}
+                />
+              );
+            })}
           </div>
 
           <div className={styles.footer}>
             <span className={styles.footerNote}>
-              Every page must be kept or resolved before you can continue.
+              {includedCount} {includedCount === 1 ? "page" : "pages"} in the
+              book.
+              {includedCount > 0
+                ? " Approve the included pages to continue."
+                : " Add a page to continue."}
             </span>
-            <button
-              type="button"
-              className={styles.ctaBtn}
-              disabled={!review.canContinue}
-              onClick={handleContinue}
-            >
-              Continue →
-            </button>
+            <ContinueAction
+              reason={continueReason}
+              onContinue={handleContinue}
+            />
           </div>
         </>
       )}
@@ -163,18 +215,181 @@ export function PageReviewPage() {
   );
 }
 
-function PageCard({ slot, onOpen }) {
+function BulkApprovalAction({
+  review,
+  selecting,
+  selectedCount,
+  onStart,
+  onCancel,
+  onApprove,
+}) {
+  const {
+    readyApprovals,
+    isBulkApproving,
+    bulkApprovalResult,
+    isBulkApprovalError,
+    unresolvedBulkFailures,
+  } = review;
+  const skipped = bulkApprovalResult?.skipped ?? 0;
+  const approved = bulkApprovalResult?.approved ?? 0;
+  const completed =
+    bulkApprovalResult && bulkApprovalResult.failedPageIds.length === 0;
+
+  return (
+    <div className={styles.bulkApproval}>
+      {selecting ? (
+        <>
+          <button
+            type="button"
+            className={styles.primaryBtn}
+            disabled={isBulkApproving || selectedCount === 0}
+            onClick={onApprove}
+          >
+            {isBulkApproving
+              ? "Approving pages…"
+              : `Approve selected (${selectedCount})`}
+          </button>
+          <button
+            type="button"
+            className={styles.secondaryBtn}
+            disabled={isBulkApproving}
+            onClick={onCancel}
+          >
+            Cancel selection
+          </button>
+        </>
+      ) : (
+        readyApprovals.length > 0 && (
+          <button
+            type="button"
+            className={styles.secondaryBtn}
+            onClick={onStart}
+          >
+            Select pages to approve
+          </button>
+        )
+      )}
+      <p className={styles.bulkMessage} role="status">
+        {isBulkApproving
+          ? "Checking and approving selected pages."
+          : completed && approved > 0
+            ? `${approved} ${approved === 1 ? "page" : "pages"} approved.`
+            : ""}
+      </p>
+      {!isBulkApproving && skipped > 0 && (
+        <p className={styles.bulkMessage} role="status">
+          {skipped === 1
+            ? "One selected page was skipped because it changed."
+            : `${skipped} selected pages were skipped because they changed.`}
+        </p>
+      )}
+      {isBulkApprovalError && !review.isError && (
+        <p className={styles.errorMsg} role="alert">
+          Couldn’t confirm your selection. Try again.
+        </p>
+      )}
+      {!isBulkApproving && unresolvedBulkFailures > 0 && (
+        <p className={styles.errorMsg} role="alert">
+          {approved} of {bulkApprovalResult.total} pages approved in this batch.
+          {unresolvedBulkFailures === 1
+            ? " One page still needs approval."
+            : ` ${unresolvedBulkFailures} pages still need approval.`}
+          {" Try again or review those pages individually."}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ContinueAction({ reason, onContinue }) {
+  const tooltipId = useId();
+  const wrapperRef = useRef(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!reason || !open) return;
+    function dismissOnEscape(event) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    function dismissOutside(event) {
+      if (!wrapperRef.current?.contains(event.target)) setOpen(false);
+    }
+    document.addEventListener("keydown", dismissOnEscape);
+    document.addEventListener("pointerdown", dismissOutside);
+    return () => {
+      document.removeEventListener("keydown", dismissOnEscape);
+      document.removeEventListener("pointerdown", dismissOutside);
+    };
+  }, [reason, open]);
+
+  return (
+    <div
+      className={styles.continueWrap}
+      ref={wrapperRef}
+      onPointerEnter={event => {
+        if (reason && event.pointerType !== "touch") setOpen(true);
+      }}
+      onPointerLeave={event => {
+        if (!event.currentTarget.contains(document.activeElement))
+          setOpen(false);
+      }}
+    >
+      <button
+        type="button"
+        className={styles.ctaBtn}
+        aria-disabled={reason ? true : undefined}
+        aria-describedby={reason ? tooltipId : undefined}
+        onFocus={() => {
+          if (reason) setOpen(true);
+        }}
+        onBlur={() => setOpen(false)}
+        onClick={() => {
+          if (reason) {
+            setOpen(true);
+            return;
+          }
+          onContinue();
+        }}
+      >
+        Continue →
+      </button>
+      {reason && (
+        <span
+          id={tooltipId}
+          className={styles.continueTooltip}
+          role="tooltip"
+          hidden={!open}
+        >
+          {reason}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function PageCard({ slot, pageNumber, selecting, selected, disabled, onOpen }) {
   const page = slot.currentPage;
   const candidate = displayCandidate(page);
   const { url } = useArtifactAccess(candidate?.artifactId ?? null);
-  const pill = statusPillFor(page.state, page.approvalSource);
+  const isApproved =
+    slot.included !== false &&
+    page.state === "approved" &&
+    page.approvalSource === "human";
 
   return (
     <button
       type="button"
       className={styles.card}
+      disabled={disabled}
       onClick={onOpen}
-      aria-label={`Open page review, status: ${pill.label}`}
+      aria-label={
+        selecting
+          ? `Page ${pageNumber}`
+          : isApproved
+            ? "Open approved page review"
+            : "Open page review"
+      }
+      aria-pressed={selecting ? selected : undefined}
     >
       <div className={styles.thumbWrap}>
         {url ? (
@@ -182,11 +397,20 @@ function PageCard({ slot, onOpen }) {
         ) : (
           <div className={styles.thumbPlaceholder} aria-hidden="true" />
         )}
+        {selected && (
+          <span className={styles.selectionMark} aria-hidden="true">
+            ✓
+          </span>
+        )}
+        {isApproved && (
+          <span
+            className={`${styles.pill} ${styles.pillReady} ${styles.thumbnailStatus}`}
+          >
+            <span className={styles.pillDot} aria-hidden="true" />
+            Approved
+          </span>
+        )}
       </div>
-      <span className={`${styles.pill} ${pill.tone}`}>
-        <span className={styles.pillDot} aria-hidden="true" />
-        {pill.label}
-      </span>
     </button>
   );
 }
@@ -216,12 +440,21 @@ function RetryOrSupport({ remaining, pending, onClick, label = "Try again" }) {
 
 function PageDetail({ slot, review, onBack }) {
   const [compare, setCompare] = useState(false);
-  const [pending, setPending] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
+  const pending = pendingAction !== null;
   const [error, setError] = useState(null);
 
   const page = slot.currentPage;
   const state = page.state;
   const isActive = ACTIVE_PAGE_STATES.has(state);
+  const included = slot.included !== false;
+  const isHumanApproved =
+    state === "approved" && page.approvalSource === "human";
+  const imageStatus = !included
+    ? "Removed from book"
+    : isHumanApproved
+      ? "Approved"
+      : "";
 
   const candidate = displayCandidate(page);
   const { url: candidateUrl } = useArtifactAccess(
@@ -234,16 +467,18 @@ function PageDetail({ slot, review, onBack }) {
   // other missing artifact id.
   const { url: sourceUrl } = useArtifactAccess(slot.sourceArtifactId);
   const hasCandidate = Boolean(candidate);
+  const canApprove = canApprovePage(page, candidate);
+  const removesPage = included && (isHumanApproved || !canApprove);
 
-  async function run(action) {
-    setPending(true);
+  async function run(action, name = "change") {
+    setPendingAction(name);
     setError(null);
     try {
       await action();
     } catch (err) {
       setError(err.message ?? "Something went wrong. Please try again.");
     } finally {
-      setPending(false);
+      setPendingAction(null);
     }
   }
 
@@ -254,13 +489,46 @@ function PageDetail({ slot, review, onBack }) {
     run(() => review.replacePhoto(slot.currentPageId, file));
   }
 
+  async function toggleSelection() {
+    if (removesPage) {
+      await review.setPageInclusion(slot.originalPageId, false);
+      return;
+    }
+    if (canApprove && !isHumanApproved) {
+      await review.keepPage(slot.currentPageId, candidate.candidateId);
+    }
+    if (!included) {
+      await review.setPageInclusion(slot.originalPageId, true);
+    }
+  }
+
   return (
     <div className={styles.detail}>
-      <button type="button" className={styles.backLink} onClick={onBack}>
+      <button
+        type="button"
+        className={styles.backLink}
+        disabled={pending}
+        onClick={onBack}
+      >
         ← Back to all pages
       </button>
 
       <div className={styles.detailImageWrap}>
+        <span
+          className={
+            imageStatus
+              ? `${styles.pill} ${styles.detailStatus} ${included ? styles.pillReady : styles.pillAttention}`
+              : styles.approvalAnnouncement
+          }
+          role="status"
+        >
+          {imageStatus && (
+            <>
+              <span className={styles.pillDot} aria-hidden="true" />
+              {imageStatus}
+            </>
+          )}
+        </span>
         {compare || !hasCandidate
           ? sourceUrl && (
               <img
@@ -301,61 +569,35 @@ function PageDetail({ slot, review, onBack }) {
       )}
 
       <div className={styles.detailActions}>
-        {isActive && (
+        <button
+          type="button"
+          className={removesPage ? styles.secondaryBtn : styles.primaryBtn}
+          disabled={pending}
+          onClick={() => run(toggleSelection, "selection")}
+        >
+          {pendingAction === "selection"
+            ? "Saving…"
+            : removesPage
+              ? "Remove from book"
+              : "Keep this page"}
+        </button>
+
+        {included && isActive && (
           <span className={styles.pendingBadge}>Making a new version…</span>
         )}
 
-        {!isActive && state === "approved" && (
-          <>
-            <button
-              type="button"
-              className={styles.primaryBtn}
-              disabled={pending}
-              onClick={() =>
-                run(() =>
-                  review.keepPage(slot.currentPageId, page.approvedCandidateId)
-                )
-              }
-            >
-              Keep this page
-            </button>
-            <button
-              type="button"
-              className={styles.secondaryBtn}
-              disabled={pending || review.regenerationsRemaining === 0}
-              onClick={() => run(() => review.tryAgain(slot.currentPageId))}
-            >
-              Try another version
-            </button>
-          </>
+        {included && state === "approved" && (
+          <button
+            type="button"
+            className={styles.secondaryBtn}
+            disabled={pending || review.regenerationsRemaining === 0}
+            onClick={() => run(() => review.tryAgain(slot.currentPageId))}
+          >
+            Try another version
+          </button>
         )}
 
-        {!isActive && state === "needs_human_review" && (
-          <>
-            <button
-              type="button"
-              className={styles.secondaryBtn}
-              disabled={pending}
-              onClick={() =>
-                run(() =>
-                  review.keepPage(
-                    slot.currentPageId,
-                    candidate?.candidateId ?? null
-                  )
-                )
-              }
-            >
-              Use this page anyway
-            </button>
-            <RetryOrSupport
-              remaining={review.regenerationsRemaining}
-              pending={pending}
-              onClick={() => run(() => review.tryAgain(slot.currentPageId))}
-            />
-          </>
-        )}
-
-        {!isActive && state === "rejected" && (
+        {included && state === "needs_human_review" && (
           <RetryOrSupport
             remaining={review.regenerationsRemaining}
             pending={pending}
@@ -363,7 +605,15 @@ function PageDetail({ slot, review, onBack }) {
           />
         )}
 
-        {!isActive &&
+        {included && state === "rejected" && (
+          <RetryOrSupport
+            remaining={review.regenerationsRemaining}
+            pending={pending}
+            onClick={() => run(() => review.tryAgain(slot.currentPageId))}
+          />
+        )}
+
+        {included &&
           (state === "provider_failed" || state === "budget_exhausted") && (
             <>
               {review.regenerationsRemaining > 0 && (
@@ -382,7 +632,7 @@ function PageDetail({ slot, review, onBack }) {
             </>
           )}
 
-        {!isActive &&
+        {included &&
           (state === "intake_rejected" || state === "intake_needs_review") && (
             <>
               {page.terminalReason && (

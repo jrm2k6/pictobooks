@@ -18,7 +18,7 @@ export function useBookPages(bookId, primaryRunId) {
       try {
         const [primaryRun, { runs }] = await Promise.all([
           api.getBookRun(bookId, primaryRunId),
-          api.listBookRuns(bookId),
+          api.listBookRuns(bookId, { liveLineageOnly: true }),
         ]);
         const otherRunIds = runs
           .map(run => run.runId)
@@ -26,7 +26,10 @@ export function useBookPages(bookId, primaryRunId) {
         const otherRuns = await Promise.all(
           otherRunIds.map(runId => api.getBookRun(bookId, runId))
         );
-        return reconcilePageSlots({ primaryRun, otherRuns });
+        return {
+          ...reconcilePageSlots({ primaryRun, otherRuns }),
+          printablePdfEnabled: primaryRun.printablePdfEnabled === true,
+        };
       } catch (err) {
         if (err instanceof UnauthorizedError) {
           navigate({ to: "/sign-in" });
@@ -59,6 +62,7 @@ export function useBookPages(bookId, primaryRunId) {
 
   return {
     slots: query.data?.slots ?? [],
+    printablePdfEnabled: query.data?.printablePdfEnabled ?? false,
     regenerationsUsed: query.data?.regenerationsUsed ?? 0,
     replacementsUsed: query.data?.replacementsUsed ?? 0,
     isLoading: query.isLoading,

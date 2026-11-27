@@ -83,7 +83,7 @@ function BookCard({ book }) {
     cancelled: "Cancelled",
   };
 
-  const isActive = book.status === "processing" || book.status === "review";
+  const isProcessing = book.status === "processing";
 
   return (
     <article className={styles.bookCard}>
@@ -118,13 +118,13 @@ function BookCard({ book }) {
 
       <div className={styles.bookCardBody}>
         <div className={styles.bookCardMeta}>
-          {isActive && (
+          {isProcessing && (
             <span className={styles.activePill}>
               <span className={styles.activeDot} aria-hidden="true" />
               {statusLabel[book.status]}
             </span>
           )}
-          {!isActive && (
+          {!isProcessing && (
             <span className={styles.statusLabel}>
               {statusLabel[book.status] ?? book.status}
             </span>

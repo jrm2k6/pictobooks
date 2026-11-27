@@ -1,0 +1,2 @@
+ALTER TABLE pages
+  ADD COLUMN included INTEGER NOT NULL DEFAULT 1 CHECK (included IN (0, 1));

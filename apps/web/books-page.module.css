@@ -61,6 +61,14 @@
   animation: shimmer 1.4s linear infinite;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .skeletonThumb,
+  .skeletonLine {
+    animation: none;
+    background: var(--color-border);
+  }
+}
+
 /* ── Empty state ──────────────────────────────────────────────────────── */
 .emptyState {
   display: grid;
@@ -291,6 +299,12 @@
   border-radius: 50%;
   background: var(--color-coral);
   animation: pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activeDot {
+    animation: none;
+  }
 }
 
 @keyframes pulse {

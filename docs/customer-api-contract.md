@@ -32,7 +32,7 @@ For screen/component ownership and planned React Query hook names, see the
 | Arrange pages                 | Persist the chosen page order before starting generation         | `PATCH /v1/books/{bookId}/runs/{runId}/photo-order`                                                                                                             | Implemented; UI is not connected                                     |
 | Processing / Slow processing  | Read run/page status and progress                                | `POST /v1/books/{bookId}/runs/{runId}/start`; poll `GET /v1/books/{bookId}/runs/{runId}`                                                                        | Implemented; UI is not connected                                     |
 | Page review / Needs attention | Read candidate previews and QA; approve/reject/request changes   | `GET` run; `POST /v1/books/{bookId}/pages/{pageId}/reviews`; `POST .../regenerations`                                                                           | Implemented; UI is not connected                                     |
-| Book preview                  | Read approved pages and obtain private preview/download access   | `GET` run; `GET /v1/artifacts/{artifactId}/access`                                                                                                              | Implemented; book export workflow/format is incomplete               |
+| Book preview                  | Read approved pages and download a private printable PDF         | `GET` run, `GET /v1/artifacts/{artifactId}/access`, `GET /v1/books/{bookId}/runs/{runId}/printable-pdf`                                                         | Preview connected. Download enabled for the alpha only.              |
 | Edition selection             | Show available formats, current price, and delivery terms        | `GET /v1/catalog/editions`                                                                                                                                      | Local prototype entries are unavailable and have zero prices         |
 | Checkout                      | Create order and payment session                                 | `POST /v1/books/{bookId}/orders`                                                                                                                                | Gap; payment provider and fulfillment integration are not selected   |
 | Order received / Status       | Show order state, tracking, or PDF download                      | `GET /v1/orders/{orderId}`                                                                                                                                      | Gap                                                                  |
@@ -90,6 +90,20 @@ or Clerk secret key belongs in the browser or D1.
   controls retries and bounded auto-repair.
 - A review names the exact candidate revision. It never means “approve the
   latest candidate” implicitly.
+- Bulk approvals may include `originalPageId` as a write-time precondition.
+  When present, the Worker records approval only if that owned slot remains
+  included and still resolves to the reviewed page; stale selections return
+  `409 page_selection_stale`. Single-page review and restoring an excluded
+  page do not use this precondition.
+- Repeating approval for the same candidate returns the existing approval,
+  including when a retry uses a fresh idempotency key. Each page retains a
+  single approval record.
+- Customers can remove or restore an original page slot using
+  `PATCH /v1/books/{bookId}/runs/{runId}/pages/{pageId}/inclusion`.
+  The slot's `included` flag persists across its generated versions.
+  Removed pages remain available in review and are excluded from preview,
+  PDF generation, and the approval requirement. An empty selection cannot
+  continue to preview or produce a PDF.
 - `regeneratePage` (reuses the existing source artifact) and
   `createPhotoReplacement` (uploads a fresh photo for an `intake_rejected` or
   `intake_needs_review` page) each cap at 3 per book per customer,

@@ -37,6 +37,7 @@ export function reconcilePageSlots({ primaryRun, otherRuns }) {
         ?.sourceArtifactId ?? null;
     return {
       originalPageId: originalPage.pageId,
+      included: originalPage.included !== false,
       currentRunId: current.run.runId,
       currentPageId: current.page.pageId,
       currentPage: current.page,
@@ -55,10 +56,15 @@ export function reconcilePageSlots({ primaryRun, otherRuns }) {
   };
 }
 
+export function includedPageSlots(slots) {
+  return slots.filter(slot => slot.included !== false);
+}
+
 export function canContinueReview(slots) {
+  const includedSlots = includedPageSlots(slots);
   return (
-    slots.length > 0 &&
-    slots.every(
+    includedSlots.length > 0 &&
+    includedSlots.every(
       slot =>
         slot.currentPage.state === "approved" &&
         slot.currentPage.approvalSource === "human"

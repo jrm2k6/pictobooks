@@ -29,7 +29,7 @@ operationStatus:
     worker: implemented
     reactClient: connected
     hook: useBookPages (apps/web/hooks/use-book-pages.js)
-    details: Used to discover regeneration/photo-replacement runs beyond the primary run, for page-slot reconciliation.
+    details: Review and preview request live lineage to discover current regeneration and photo replacement runs across the book's history.
   createBookRun:
     worker: implemented
     reactClient: connected
@@ -56,6 +56,11 @@ operationStatus:
     worker: implemented
     reactClient: connected
     hook: usePageReview (apps/web/hooks/use-page-review.js)
+  setPageInclusion:
+    worker: implemented
+    reactClient: connected
+    hook: usePageReview (apps/web/hooks/use-page-review.js)
+    details: Removes or restores an original page slot. Removed slots are omitted from preview, PDF, and approval gating.
   regeneratePage:
     worker: implemented
     reactClient: connected
@@ -69,6 +74,10 @@ operationStatus:
     worker: implemented
     reactClient: connected
     hook: useArtifactAccess (apps/web/hooks/use-artifact-access.js)
+  downloadPrintablePdf:
+    worker: implemented
+    reactClient: connected
+    details: The alpha-enabled primary run exports its current explicitly approved candidates in preview order using an authenticated PDF response.
   listEditions:
     worker: implemented
     reactClient: disconnected
@@ -282,6 +291,10 @@ screens:
         mutationHook: usePageReview().keepPage
         decision: approved
         when: Page state is approved (auto-passed QA) or needs_human_review ("Use this page anyway").
+      - event: Remove from book / Keep this page
+        operationId: setPageInclusion
+        mutationHook: usePageReview().setPageInclusion
+        note: Changes the original slot's inclusion and preserves its candidates and approval history. Keeping a page also confirms its candidate when approval is still needed.
       - event: Try another version / Try again
         operationId: regeneratePage
         mutationHook: usePageReview().tryAgain
@@ -292,7 +305,7 @@ screens:
         note: Shown only for intake_rejected/intake_needs_review pages (the source photo itself was unusable, so there is no candidate to keep). Followed by the existing uploadPhoto + startBookRun sequence. Disabled (replaced by a contact-support link) once the book's separate 3-replacement cap is reached.
       - event: Continue
         operationId: getBookRun
-        note: Enabled only once every page slot resolves to approved (canContinue).
+        note: Enabled when at least one slot is included and every included slot has explicit human approval.
         nextScreen: preview
 
   - id: preview
@@ -311,9 +324,12 @@ screens:
         hook: useArtifactAccess
         when: Request a short-lived, authenticated image URL for each spread page's approved candidate.
     actions:
+      - event: Download printable PDF
+        operationId: downloadPrintablePdf
+        note: Available when the primary run enables alpha downloads and every current page is explicitly approved.
       - event: Choose an edition
         operationId: none
-        note: "TODO: edition/checkout routes don't exist yet; the navigate target is a placeholder."
+        note: The button remains a placeholder in environments with alpha downloading disabled.
         nextScreen: edition
       - event: Back to page review
         operationId: getBookRun

@@ -1,3 +1,4 @@
+import { mockCandidateSvg } from "./mockPageDrawing.js";
 import type { WorkflowStepConfig } from "cloudflare:workers";
 import { objectKeys } from "../domain/objectKeys.js";
 import type {
@@ -1406,18 +1407,3 @@ const mockStyleScore = (
   }
   return [0.5, 0.56, 0.62][semanticAttempt] ?? 0.62;
 };
-
-const mockCandidateSvg = (
-  candidateId: string,
-  semanticAttempt: number
-): string =>
-  `
-<svg xmlns="http://www.w3.org/2000/svg" width="2480" height="3508" viewBox="0 0 2480 3508">
-  <rect width="2480" height="3508" fill="white"/>
-  <rect x="90" y="90" width="2300" height="3328" rx="80" fill="none" stroke="black" stroke-width="64"/>
-  <circle cx="1240" cy="1150" r="620" fill="white" stroke="black" stroke-width="54"/>
-  <circle cx="1010" cy="1050" r="55" fill="black"/><circle cx="1470" cy="1050" r="55" fill="black"/>
-  <path d="M930 1350 Q1240 1600 1550 1350" fill="none" stroke="black" stroke-width="54" stroke-linecap="round"/>
-  <path d="M560 2900 Q1240 2050 1920 2900" fill="none" stroke="black" stroke-width="70"/>
-  <text x="120" y="3380" font-size="1" fill="white">${candidateId}-${semanticAttempt}</text>
-</svg>`.trim();
