@@ -46,12 +46,17 @@ const encodeBase64Url = (data: unknown): string =>
 
 const signJwt = async (
   sub: string,
-  overrides: { exp?: number } = {}
+  overrides: { exp?: number; email?: string } = {}
 ): Promise<string> => {
   const exp = overrides.exp ?? Math.floor(Date.now() / 1000) + 3600;
   const jti = crypto.randomUUID();
   const headerB64 = encodeBase64Url({ alg: "RS256", kid: TEST_KID });
-  const payloadB64 = encodeBase64Url({ sub, exp, jti });
+  const payloadB64 = encodeBase64Url({
+    sub,
+    exp,
+    jti,
+    ...(overrides.email !== undefined ? { email: overrides.email } : {}),
+  });
   const sigInput = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
   const rawSig = await crypto.subtle.sign(
     "RSASSA-PKCS1-v1_5",
@@ -145,7 +150,10 @@ describe("WP6 authenticated pipeline API", () => {
       env.PIPELINE_ARTIFACTS,
       new FakeSigner(),
       launcher,
-      () => now
+      () => now,
+      undefined,
+      false,
+      1
     );
     // Mock fetch to serve the test JWKS for the router JWT auth path
     vi.stubGlobal(
@@ -1489,7 +1497,10 @@ describe("WP6 authenticated pipeline API", () => {
       env.PIPELINE_ARTIFACTS,
       new FakeSigner(),
       launcher,
-      () => clockNow
+      () => clockNow,
+      undefined,
+      false,
+      1
     );
     const book = await clockedApi.createBook(owner, "upload-expired-book-001");
     const bookId = String(book.body.bookId);
@@ -1970,6 +1981,299 @@ describe("WP6 authenticated pipeline API", () => {
       createdAt: now.toISOString(),
       completedAt: now.toISOString(),
     });
+  });
+
+  it("restricts API access to ALPHA_ALLOWED_USER_IDS when configured", async () => {
+    const gatedEnv: RuntimeEnv = {
+      ...(env as unknown as RuntimeEnv),
+      ALPHA_ALLOWED_USER_IDS: ` , ${owner.userId} , another-alpha-user `,
+    };
+
+    const allowedGet = await handleApiRequest(
+      new Request("https://api.invalid/v1/books", {
+        headers: { Authorization: `Bearer ${await signJwt(owner.userId)}` },
+      }),
+      gatedEnv
+    );
+    expect(allowedGet?.status).toBe(200);
+
+    const allowedCreate = await handleApiRequest(
+      new Request("https://api.invalid/v1/books", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${await signJwt(owner.userId)}`,
+          "Idempotency-Key": "alpha-allowlisted-book-001",
+        },
+      }),
+      gatedEnv
+    );
+    expect(allowedCreate?.status).toBe(201);
+
+    const denied = await handleApiRequest(
+      new Request("https://api.invalid/v1/books", {
+        headers: { Authorization: `Bearer ${await signJwt(stranger.userId)}` },
+      }),
+      gatedEnv
+    );
+    expect(denied?.status).toBe(403);
+    expect(await denied?.json()).toMatchObject({
+      status: 403,
+      code: "alpha_access_required",
+    });
+  });
+
+  it("restricts API access to ALPHA_ALLOWED_EMAILS case-insensitively and fails closed without email claim", async () => {
+    const emailGatedEnv: RuntimeEnv = {
+      ...(env as unknown as RuntimeEnv),
+      ALPHA_ALLOWED_EMAILS: " Parent@Example.com , friend@example.org ",
+    };
+
+    const allowedByEmail = await handleApiRequest(
+      new Request("https://api.invalid/v1/books", {
+        headers: {
+          Authorization: `Bearer ${await signJwt(owner.userId, { email: "parent@example.COM" })}`,
+        },
+      }),
+      emailGatedEnv
+    );
+    expect(allowedByEmail?.status).toBe(200);
+
+    const wrongEmail = await handleApiRequest(
+      new Request("https://api.invalid/v1/books", {
+        headers: {
+          Authorization: `Bearer ${await signJwt(stranger.userId, { email: "other@example.com" })}`,
+        },
+      }),
+      emailGatedEnv
+    );
+    expect(wrongEmail?.status).toBe(403);
+    expect(await wrongEmail?.json()).toMatchObject({
+      status: 403,
+      code: "alpha_access_required",
+    });
+
+    const missingEmail = await handleApiRequest(
+      new Request("https://api.invalid/v1/books", {
+        headers: {
+          Authorization: `Bearer ${await signJwt(owner.userId)}`,
+        },
+      }),
+      emailGatedEnv
+    );
+    expect(missingEmail?.status).toBe(403);
+    expect(await missingEmail?.json()).toMatchObject({
+      status: 403,
+      code: "alpha_access_required",
+    });
+
+    // When both allowlists are configured, matching either grants access.
+    const combinedEnv: RuntimeEnv = {
+      ...emailGatedEnv,
+      ALPHA_ALLOWED_USER_IDS: stranger.userId,
+    };
+    const allowedByIdFallback = await handleApiRequest(
+      new Request("https://api.invalid/v1/books", {
+        headers: {
+          Authorization: `Bearer ${await signJwt(stranger.userId)}`,
+        },
+      }),
+      combinedEnv
+    );
+    expect(allowedByIdFallback?.status).toBe(200);
+  });
+
+  it("enables printable PDFs on hosted runtimes via PRINTABLE_PDF_ENABLED and respects optional ALPHA_ALLOWED_USER_IDS", async () => {
+    const { bookId, runId, pageId, candidateId } = await seedReviewablePage();
+    await setPrintableCandidate(pageId, MINI_PNGS[0]);
+    await api.reviewCandidate(
+      owner,
+      "hosted-pdf-approval-001",
+      bookId,
+      pageId,
+      {
+        candidateId,
+        decision: "approved",
+      }
+    );
+
+    const runUrl = `https://api.invalid/v1/books/${bookId}/runs/${runId}`;
+    const downloadUrl = `${runUrl}/printable-pdf`;
+    const hostedBase: RuntimeEnv = {
+      ...(env as unknown as RuntimeEnv),
+      LOCAL_CUSTOMER_API: "false",
+      PRINTABLE_PDF_ENABLED: "true",
+      R2_ACCESS_KEY_ID: "test-access-key",
+      R2_SECRET_ACCESS_KEY: "test-secret-key",
+      R2_ENDPOINT: "https://r2.invalid",
+      R2_BUCKET: "test-bucket",
+      ALPHA_ALLOWED_USER_IDS: undefined,
+    };
+
+    const ownerRequest = async (url: string) =>
+      new Request(url, {
+        headers: { Authorization: `Bearer ${await signJwt(owner.userId)}` },
+      });
+
+    // With Clerk Restricted mode handling invites, PRINTABLE_PDF_ENABLED works without a Worker user-ID allowlist.
+    const hostedRun = await handleApiRequest(
+      await ownerRequest(runUrl),
+      hostedBase
+    );
+    expect(hostedRun?.status).toBe(200);
+    expect(await hostedRun?.json()).toMatchObject({
+      printablePdfEnabled: true,
+    });
+    const hostedDownload = await handleApiRequest(
+      await ownerRequest(downloadUrl),
+      hostedBase
+    );
+    expect(hostedDownload?.status).toBe(200);
+    expect(
+      (
+        await PDFDocument.load(await hostedDownload!.arrayBuffer())
+      ).getPageCount()
+    ).toBe(1);
+
+    // When ALPHA_ALLOWED_USER_IDS is also configured, non-allowlisted users are blocked with 403.
+    const hostedAlpha: RuntimeEnv = {
+      ...hostedBase,
+      ALPHA_ALLOWED_USER_IDS: owner.userId,
+    };
+    const nonAlphaDownload = await handleApiRequest(
+      new Request(downloadUrl, {
+        headers: { Authorization: `Bearer ${await signJwt(stranger.userId)}` },
+      }),
+      hostedAlpha
+    );
+    expect(nonAlphaDownload?.status).toBe(403);
+    expect(await nonAlphaDownload?.json()).toMatchObject({
+      code: "alpha_access_required",
+    });
+  });
+
+  it("enforces MAX_BOOKS_PER_USER per owner, preserves idempotent replays, and ignores cancelled books", async () => {
+    const cappedEnv: RuntimeEnv = {
+      ...(env as unknown as RuntimeEnv),
+      MAX_BOOKS_PER_USER: "1",
+    };
+
+    const ownerJwt = await signJwt(owner.userId);
+    const configRes = await handleApiRequest(
+      new Request("https://api.invalid/v1/pipeline-config", {
+        headers: { Authorization: `Bearer ${ownerJwt}` },
+      }),
+      cappedEnv
+    );
+    expect(configRes?.status).toBe(200);
+    expect(await configRes?.json()).toMatchObject({ maxBooksPerUser: 1 });
+
+    const uncappedConfigRes = await handleApiRequest(
+      new Request("https://api.invalid/v1/pipeline-config", {
+        headers: { Authorization: `Bearer ${ownerJwt}` },
+      }),
+      env as unknown as RuntimeEnv
+    );
+    expect(await uncappedConfigRes?.json()).toMatchObject({
+      maxBooksPerUser: null,
+    });
+
+    const createBookRequest = (jwt: string, key: string) =>
+      new Request("https://api.invalid/v1/books", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${jwt}`,
+          "Idempotency-Key": key,
+        },
+      });
+
+    const first = await handleApiRequest(
+      createBookRequest(ownerJwt, "book-cap-001"),
+      cappedEnv
+    );
+    expect(first?.status).toBe(201);
+    const firstBody = (await first?.json()) as { bookId: string };
+
+    // Replaying the same idempotency key succeeds and returns the original book.
+    const replay = await handleApiRequest(
+      createBookRequest(ownerJwt, "book-cap-001"),
+      cappedEnv
+    );
+    expect(replay?.status).toBe(201);
+    expect(await replay?.json()).toEqual(firstBody);
+
+    // Creating a second book for the same owner is rejected.
+    const second = await handleApiRequest(
+      createBookRequest(ownerJwt, "book-cap-002"),
+      cappedEnv
+    );
+    expect(second?.status).toBe(403);
+    expect(await second?.json()).toMatchObject({
+      status: 403,
+      code: "book_limit_reached",
+    });
+
+    // Another owner still has their own independent 1-book quota.
+    const strangerJwt = await signJwt(stranger.userId);
+    const strangerBook = await handleApiRequest(
+      createBookRequest(strangerJwt, "book-cap-stranger-001"),
+      cappedEnv
+    );
+    expect(strangerBook?.status).toBe(201);
+
+    // Cancelling the first book frees the owner's slot for a replacement.
+    await env.PIPELINE_DB.prepare(
+      "UPDATE books SET status = 'cancelled' WHERE book_id = ?"
+    )
+      .bind(firstBody.bookId)
+      .run();
+
+    const replacement = await handleApiRequest(
+      createBookRequest(ownerJwt, "book-cap-003"),
+      cappedEnv
+    );
+    expect(replacement?.status).toBe(201);
+  });
+
+  it("enforces default 5..10 photo count bounds on hosted runtimes", async () => {
+    const hostedApi = new PipelineApi(
+      env.PIPELINE_DB,
+      env.PIPELINE_ARTIFACTS,
+      new FakeSigner(),
+      launcher,
+      () => now
+    );
+    const book = await hostedApi.createBook(owner, "hosted-photo-bounds-book");
+    const bookId = String(book.body.bookId);
+    const sha256 = await digest(photoBytes);
+    const makePhotos = (count: number) =>
+      Array.from({ length: count }, () => ({
+        contentType: "image/jpeg" as const,
+        byteSize: photoBytes.byteLength,
+        sha256,
+      }));
+
+    await expect(
+      hostedApi.createBookRun(owner, "hosted-photo-bounds-4", bookId, {
+        photos: makePhotos(4),
+      })
+    ).rejects.toMatchObject({ status: 400, code: "invalid_photo_count" });
+
+    await expect(
+      hostedApi.createBookRun(owner, "hosted-photo-bounds-11", bookId, {
+        photos: makePhotos(11),
+      })
+    ).rejects.toMatchObject({ status: 400, code: "invalid_photo_count" });
+
+    const created = await hostedApi.createBookRun(
+      owner,
+      "hosted-photo-bounds-5",
+      bookId,
+      {
+        photos: makePhotos(5),
+      }
+    );
+    expect(created.status).toBe(201);
+    expect(created.body.uploads).toHaveLength(5);
   });
 });
 

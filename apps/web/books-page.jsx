@@ -2,7 +2,13 @@ import React from "react";
 import { Link } from "@tanstack/react-router";
 import { AppShell } from "./app-shell.jsx";
 import { useBooks } from "./hooks/use-books.js";
+import { usePipelineConfig } from "./hooks/use-pipeline-config.js";
 import { hasSavedOrderPhotos, resolveBookDestination } from "./book-resume.js";
+import {
+  formatApiError,
+  formatBookLimitNote,
+  hasReachedBookLimit,
+} from "./alpha-limits.js";
 import styles from "./books-page.module.css";
 
 /* ── Loading skeleton ─────────────────────────────────────────────────── */
@@ -174,7 +180,7 @@ function BookCard({ book }) {
 }
 
 /* ── Books list ───────────────────────────────────────────────────────── */
-function BookList({ books }) {
+function BookList({ books, bookLimitReached, maxBooksPerUser }) {
   return (
     <>
       <header className={styles.listHeader}>
@@ -184,9 +190,15 @@ function BookList({ books }) {
             Pick up where you left off, or turn new photos into a book.
           </p>
         </div>
-        <Link to="/books/new" className={styles.ctaBtn}>
-          Create a book →
-        </Link>
+        {bookLimitReached ? (
+          <span className={styles.limitNote}>
+            {formatBookLimitNote(maxBooksPerUser)}
+          </span>
+        ) : (
+          <Link to="/books/new" className={styles.ctaBtn}>
+            Create a book →
+          </Link>
+        )}
       </header>
 
       <div className={styles.bookGrid}>
@@ -211,16 +223,30 @@ function BookList({ books }) {
 /* ── BooksPage ────────────────────────────────────────────────────────── */
 export function BooksPage() {
   const { data: books, isLoading, isError, error } = useBooks();
+  const { maxBooksPerUser } = usePipelineConfig();
+  const bookLimitReached = hasReachedBookLimit(books, maxBooksPerUser);
+  const isAlphaGated = error?.code === "alpha_access_required";
 
   return (
     <AppShell>
       {isLoading && <BooksSkeleton />}
 
-      {isError && (
+      {isError && isAlphaGated && (
+        <div className={styles.alphaNotice} role="status">
+          <span className={styles.emptyEyebrow}>Invite-only alpha</span>
+          <h1 className={styles.alphaHeading}>
+            Pictobook is currently invite-only.
+          </h1>
+          <p className={styles.alphaBody}>{formatApiError(error)}</p>
+        </div>
+      )}
+
+      {isError && !isAlphaGated && (
         <div className={styles.errorState} role="alert">
           <p className={styles.errorMsg}>
-            {error?.message ??
-              "Could not load your books. Please try refreshing."}
+            {formatApiError(error, {
+              fallback: "Could not load your books. Please try refreshing.",
+            })}
           </p>
         </div>
       )}
@@ -228,7 +254,11 @@ export function BooksPage() {
       {!isLoading && !isError && books?.length === 0 && <EmptyState />}
 
       {!isLoading && !isError && books?.length > 0 && (
-        <BookList books={books} />
+        <BookList
+          books={books}
+          bookLimitReached={bookLimitReached}
+          maxBooksPerUser={maxBooksPerUser}
+        />
       )}
     </AppShell>
   );

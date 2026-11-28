@@ -1,7 +1,9 @@
 import React, { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { WizardShell } from "./wizard-shell.jsx";
 import { useCreateBook } from "../hooks/use-create-book.js";
+import { usePipelineConfig } from "../hooks/use-pipeline-config.js";
+import { formatApiError } from "../alpha-limits.js";
 import styles from "./book-details-page.module.css";
 
 /**
@@ -12,6 +14,8 @@ import styles from "./book-details-page.module.css";
 export function BookDetailsPage() {
   const navigate = useNavigate();
   const { mutateAsync: createBook, isPending, error } = useCreateBook();
+  const { minPhotosPerRun: minPhotos, maxPhotosPerRun: maxPhotos } =
+    usePipelineConfig();
 
   const [form, setForm] = useState({
     childName: "",
@@ -24,11 +28,15 @@ export function BookDetailsPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    const { bookId } = await createBook({
-      title: form.title || undefined,
-      childName: form.childName || undefined,
-    });
-    navigate({ to: "/books/new/photos", search: { bookId } });
+    try {
+      const { bookId } = await createBook({
+        title: form.title || undefined,
+        childName: form.childName || undefined,
+      });
+      navigate({ to: "/books/new/photos", search: { bookId } });
+    } catch {
+      // Surfaced via mutation error state
+    }
   }
 
   return (
@@ -82,13 +90,22 @@ export function BookDetailsPage() {
 
         {error && (
           <p className={styles.errorMsg} role="alert">
-            {error.message ?? "Something went wrong. Please try again."}
+            {formatApiError(error)}
+            {error.code === "book_limit_reached" && (
+              <>
+                {" "}
+                <Link to="/books" className={styles.errorLink}>
+                  Go to My Books →
+                </Link>
+              </>
+            )}
           </p>
         )}
 
         <div className={styles.footer}>
           <span className={styles.footerNote}>
-            Next, choose 5–20 photos. You can review every page before ordering.
+            Next, choose {minPhotos}–{maxPhotos} photos. You can review every
+            page before ordering.
           </span>
           <button type="submit" className={styles.ctaBtn} disabled={isPending}>
             {isPending ? "Creating…" : "Choose photos →"}

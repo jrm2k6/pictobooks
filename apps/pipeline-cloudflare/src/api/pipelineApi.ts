@@ -108,7 +108,8 @@ export class PipelineApi {
     private readonly localCustomerApi = false,
     private readonly minPhotosPerRun = MIN_PHOTOS,
     private readonly maxPhotosPerRun = MAX_PHOTOS_PER_RUN,
-    private readonly printablePdfEnabled = false
+    private readonly printablePdfEnabled = false,
+    private readonly maxBooksPerUser: number | null = null
   ) {
     this.artifacts = new R2ArtifactStore(bucket, database);
   }
@@ -130,6 +131,7 @@ export class PipelineApi {
         maxCostPerPageMicros: this.maximumCostPerPageMicros(),
         minPhotosPerRun: this.minPhotosPerRun,
         maxPhotosPerRun: this.maxPhotosPerRun,
+        maxBooksPerUser: this.maxBooksPerUser,
       },
     };
   }
@@ -141,6 +143,17 @@ export class PipelineApi {
   ): Promise<ApiResponse> {
     return this.mutate(principal, key, "create_book", async stable => {
       validateBookPersonalization(input);
+      if (this.maxBooksPerUser !== null) {
+        const existing = await this.database
+          .prepare(
+            "SELECT count(*) AS count FROM books WHERE owner_id = ? AND status <> 'cancelled'"
+          )
+          .bind(principal.userId)
+          .first<{ count: number }>();
+        if ((existing?.count ?? 0) >= this.maxBooksPerUser) {
+          throw new ApiProblem(403, "book_limit_reached");
+        }
+      }
       const bookId = `book-${stable}`;
       const now = this.isoNow();
       await this.database
@@ -488,9 +501,8 @@ export class PipelineApi {
         this.assertGenerationProviderAvailable();
         validatePhotos(input.photos);
         if (
-          this.localCustomerApi &&
-          (input.photos.length < this.minPhotosPerRun ||
-            input.photos.length > this.maxPhotosPerRun)
+          input.photos.length < this.minPhotosPerRun ||
+          input.photos.length > this.maxPhotosPerRun
         ) {
           throw new ApiProblem(400, "invalid_photo_count");
         }

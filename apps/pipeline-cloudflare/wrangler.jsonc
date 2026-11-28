@@ -93,6 +93,7 @@
         "GEMINI_STYLE_JUDGE_COST_MICROS": "10000",
         "PIPELINE_INITIAL_CANDIDATE_COUNT": "2",
         "SMOKE_TESTS_ENABLED": "true",
+        "CLERK_JWKS_URL": "https://clerk.pictobook.app/.well-known/jwks.json",
       },
       "d1_databases": [
         {
