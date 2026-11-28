@@ -14,6 +14,7 @@ import { OrderPagesPage } from "./pages/order-pages-page.jsx";
 import { ProcessingPage } from "./pages/processing-page.jsx";
 import { PageReviewPage } from "./pages/page-review-page.jsx";
 import { BookPreviewPage } from "./pages/book-preview-page.jsx";
+import { BookResumePage } from "./pages/book-resume-page.jsx";
 import { AuthLayout, clerkAppearance } from "./auth-layout.jsx";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -166,6 +167,12 @@ const bookPreviewRoute = createRoute({
   component: BookPreviewPage,
 });
 
+const bookResumeRoute = createRoute({
+  getParentRoute: () => authedLayout,
+  path: "/books/$bookId",
+  component: BookResumePage,
+});
+
 // ── Router ─────────────────────────────────────────────────────────────
 
 const router = createRouter({
@@ -182,6 +189,7 @@ const router = createRouter({
       bookCreatingRoute,
       pageReviewRoute,
       bookPreviewRoute,
+      bookResumeRoute,
     ]),
   ]),
 });

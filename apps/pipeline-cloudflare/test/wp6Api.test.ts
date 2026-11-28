@@ -1760,6 +1760,217 @@ describe("WP6 authenticated pipeline API", () => {
       approvedCandidateId: seeded.candidateId,
     });
   });
+
+  it("summarizes latestRun on listBooks across draft, expired upload, approval, exclusion, and live lineage", async () => {
+    // 1. Draft book with no runs -> latestRun: null
+    const draftBook = await api.createBook(owner, "bookshelf-draft-book", {
+      title: "Draft Book",
+    });
+    const draftBookId = String(draftBook.body.bookId);
+
+    // 2. Primary run in `created` state with an expired upload intent -> uploadExpired: true
+    const expiredBook = await api.createBook(owner, "bookshelf-expired-book", {
+      title: "Expired Upload Book",
+    });
+    const expiredBookId = String(expiredBook.body.bookId);
+    const sha256 = await digest(photoBytes);
+    const expiredRunRes = await api.createBookRun(
+      owner,
+      "bookshelf-expired-run",
+      expiredBookId,
+      {
+        photos: [
+          {
+            contentType: "image/jpeg",
+            byteSize: photoBytes.byteLength,
+            sha256,
+          },
+        ],
+      }
+    );
+    const expiredRunId = String(expiredRunRes.body.runId);
+    await env.PIPELINE_DB.prepare(
+      "UPDATE upload_intents SET expires_at = ? WHERE run_id = ?"
+    )
+      .bind("2026-11-10T11:59:00.000Z", expiredRunId)
+      .run();
+
+    // 3 & 4. Primary run with auto-approved vs human-approved pages and excluded slot
+    const autoSeeded = await seedAutoApprovedPage();
+    const secondPageId = "page-auto-second";
+    const secondCandidateId = await seedPrintablePage({
+      runId: autoSeeded.runId,
+      pageId: secondPageId,
+      ordinal: 2,
+    });
+    await api.reviewCandidate(
+      owner,
+      "bookshelf-approve-second",
+      autoSeeded.bookId,
+      secondPageId,
+      { candidateId: secondCandidateId, decision: "approved" }
+    );
+
+    // 5. Primary run with regenerated/replaced page slot and an expired newer replacement ignored
+    const lineageSeeded = await seedReviewablePage();
+    const liveChildId = "page-bookshelf-live-child";
+    const expiredChildId = "page-bookshelf-expired-child";
+    await env.PIPELINE_DB.prepare(
+      "INSERT INTO book_runs VALUES (?, ?, 'partially_completed', 'pictobook-preschool-v0.1', 7000, 3000, ?, ?, ?)"
+    )
+      .bind(
+        liveChildId,
+        lineageSeeded.bookId,
+        "2026-11-10T12:05:00.000Z",
+        "2026-11-10T12:05:00.000Z",
+        "2026-11-10T12:05:00.000Z"
+      )
+      .run();
+    const liveChildCandidateId = await seedPrintablePage({
+      runId: liveChildId,
+      pageId: liveChildId,
+      ordinal: 1,
+    });
+    await env.PIPELINE_DB.prepare(
+      "INSERT INTO book_run_regenerations (new_run_id, source_run_id, source_page_id, requested_by, created_at, kind) VALUES (?, ?, ?, ?, ?, 'photo_replacement')"
+    )
+      .bind(
+        liveChildId,
+        lineageSeeded.runId,
+        lineageSeeded.pageId,
+        owner.userId,
+        "2026-11-10T12:05:00.000Z"
+      )
+      .run();
+    await api.reviewCandidate(
+      owner,
+      "bookshelf-approve-live-child",
+      lineageSeeded.bookId,
+      liveChildId,
+      { candidateId: liveChildCandidateId, decision: "approved" }
+    );
+
+    // Add a newer replacement whose upload intent expired unresolved — must be ignored
+    await env.PIPELINE_DB.prepare(
+      "INSERT INTO book_runs VALUES (?, ?, 'created', 'pictobook-preschool-v0.1', 7000, 0, ?, ?, NULL)"
+    )
+      .bind(
+        expiredChildId,
+        lineageSeeded.bookId,
+        "2026-11-10T12:10:00.000Z",
+        "2026-11-10T12:10:00.000Z"
+      )
+      .run();
+    await seedPrintablePage({
+      runId: expiredChildId,
+      pageId: expiredChildId,
+      ordinal: 1,
+    });
+    await env.PIPELINE_DB.batch([
+      env.PIPELINE_DB.prepare(
+        "INSERT INTO book_run_regenerations (new_run_id, source_run_id, source_page_id, requested_by, created_at, kind) VALUES (?, ?, ?, ?, ?, 'photo_replacement')"
+      ).bind(
+        expiredChildId,
+        lineageSeeded.runId,
+        lineageSeeded.pageId,
+        owner.userId,
+        "2026-11-10T12:10:00.000Z"
+      ),
+      env.PIPELINE_DB.prepare(
+        "UPDATE photos SET source_artifact_id = NULL WHERE run_id = ?"
+      ).bind(expiredChildId),
+      env.PIPELINE_DB.prepare(
+        `INSERT INTO upload_intents VALUES (?, ?, ?, ?, ?, ?, ?, 'image/png', 1, ?, ?, NULL, ?)`
+      ).bind(
+        `upload-${expiredChildId}`,
+        owner.userId,
+        lineageSeeded.bookId,
+        expiredChildId,
+        `photo-${expiredChildId}`,
+        `source:${expiredChildId}`,
+        `uploads/${expiredChildId}`,
+        "0".repeat(64),
+        "2026-11-10T11:55:00.000Z",
+        "2026-11-10T11:40:00.000Z"
+      ),
+    ]);
+
+    const listBeforeExclude = await api.listBooks(owner);
+    const byBookId = new Map(
+      (listBeforeExclude.body.books as Array<Record<string, unknown>>).map(
+        b => [String(b["bookId"]), b]
+      )
+    );
+
+    expect(byBookId.get(draftBookId)?.["latestRun"]).toBeNull();
+
+    expect(byBookId.get(expiredBookId)?.["latestRun"]).toEqual({
+      runId: expiredRunId,
+      status: "created",
+      totalPageCount: 1,
+      includedPageCount: 1,
+      readyPageCount: 0,
+      humanApprovedPageCount: 0,
+      reviewComplete: false,
+      uploadExpired: true,
+      createdAt: now.toISOString(),
+      completedAt: null,
+    });
+
+    // Auto-approved + human-approved: both ready, only 1 human-approved -> reviewComplete: false
+    expect(byBookId.get(autoSeeded.bookId)?.["latestRun"]).toEqual({
+      runId: autoSeeded.runId,
+      status: "partially_completed",
+      totalPageCount: 2,
+      includedPageCount: 2,
+      readyPageCount: 2,
+      humanApprovedPageCount: 1,
+      reviewComplete: false,
+      uploadExpired: false,
+      createdAt: now.toISOString(),
+      completedAt: now.toISOString(),
+    });
+
+    // Regenerated slot resolves to live human-approved child (ignoring newer expired replacement)
+    expect(byBookId.get(lineageSeeded.bookId)?.["latestRun"]).toEqual({
+      runId: lineageSeeded.runId,
+      status: "partially_completed",
+      totalPageCount: 1,
+      includedPageCount: 1,
+      readyPageCount: 1,
+      humanApprovedPageCount: 1,
+      reviewComplete: true,
+      uploadExpired: false,
+      createdAt: now.toISOString(),
+      completedAt: now.toISOString(),
+    });
+
+    // Exclude the auto-approved slot -> includedPageCount drops to 1 and reviewComplete becomes true
+    await api.setPageInclusion(
+      owner,
+      "bookshelf-exclude-auto",
+      autoSeeded.bookId,
+      autoSeeded.runId,
+      autoSeeded.pageId,
+      false
+    );
+    const listAfterExclude = await api.listBooks(owner);
+    const autoAfterExclude = (
+      listAfterExclude.body.books as Array<Record<string, unknown>>
+    ).find(b => b["bookId"] === autoSeeded.bookId);
+    expect(autoAfterExclude?.["latestRun"]).toEqual({
+      runId: autoSeeded.runId,
+      status: "partially_completed",
+      totalPageCount: 2,
+      includedPageCount: 1,
+      readyPageCount: 1,
+      humanApprovedPageCount: 1,
+      reviewComplete: true,
+      uploadExpired: false,
+      createdAt: now.toISOString(),
+      completedAt: now.toISOString(),
+    });
+  });
 });
 
 const seedReviewablePage = async () => {
