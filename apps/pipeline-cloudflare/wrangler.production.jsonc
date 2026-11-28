@@ -10,6 +10,7 @@
   "vars": {
     "PIPELINE_INITIAL_CANDIDATE_COUNT": "2",
     "LOCAL_CUSTOMER_API": "false",
+    "PRINTABLE_PDF_ENABLED": "true",
     "IMAGE_PROVIDER": "gemini",
     "R2_ENDPOINT": "https://80cab986d9f7c33ae20f05b088aa2604.r2.cloudflarestorage.com",
     "R2_BUCKET": "pictobook-pipeline-production",

@@ -84,6 +84,7 @@
       "workers_dev": true,
       "vars": {
         "LOCAL_CUSTOMER_API": "false",
+        "PRINTABLE_PDF_ENABLED": "true",
         "R2_ENDPOINT": "https://80cab986d9f7c33ae20f05b088aa2604.r2.cloudflarestorage.com",
         "R2_BUCKET": "pictobook-pipeline-preview",
         "IMAGE_PROVIDER": "gemini",
