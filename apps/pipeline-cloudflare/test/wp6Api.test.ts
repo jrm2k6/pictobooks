@@ -239,6 +239,39 @@ describe("WP6 authenticated pipeline API", () => {
     expect(created?.status).toBe(201);
   });
 
+  it("allows opaque D1 sessions only when LOCAL_CUSTOMER_API is enabled", async () => {
+    const opaqueToken = "local_smoke_token_" + "a".repeat(32);
+    const tokenHash = await sha256Hex(opaqueToken);
+    const futureExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    await env.PIPELINE_DB.prepare(
+      `INSERT INTO api_sessions
+       (session_id, token_sha256, user_id, expires_at, revoked_at, created_at)
+       VALUES ('session-local-001', ?, ?, ?, NULL, ?)`
+    )
+      .bind(tokenHash, owner.userId, futureExpiry, now.toISOString())
+      .run();
+
+    const makeRequest = () =>
+      new Request("https://api.invalid/v1/books", {
+        headers: { Authorization: `Bearer ${opaqueToken}` },
+      });
+
+    // Hosted/non-local runtime must reject opaque D1 tokens even if seeded.
+    const hostedRes = await handleApiRequest(makeRequest(), {
+      ...(env as unknown as RuntimeEnv),
+      LOCAL_CUSTOMER_API: "false",
+    });
+    expect(hostedRes?.status).toBe(401);
+
+    // Local runtime accepts valid opaque D1 session without Clerk JWKS.
+    const localRes = await handleApiRequest(makeRequest(), {
+      ...(env as unknown as RuntimeEnv),
+      LOCAL_CUSTOMER_API: "true",
+      CLERK_JWKS_URL: "",
+    });
+    expect(localRes?.status).toBe(200);
+  });
+
   it("serves private printable PDFs only to the owner when explicitly enabled", async () => {
     const { bookId, runId, pageId, candidateId } = await seedReviewablePage();
     await setPrintableCandidate(pageId, MINI_PNGS[0]);

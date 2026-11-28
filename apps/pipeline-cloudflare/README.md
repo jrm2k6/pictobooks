@@ -98,7 +98,8 @@ for the route and security contracts.
 ## WP8 Gemini image generation and Style QA
 
 Production book runs use Nano Banana 2.1 (`gemini-nano-banana-2.1`) for
-candidate images and a Gemini Flash vision model for Style QA. The Worker first
+candidate images and a Gemini Flash vision model (`GEMINI_VISION_MODEL`,
+defaulting to `gemini-3.8-flash`) for photo intake and Style QA. The Worker first
 normalizes the source photo to PNG, then provides the image provider with the
 source, the style bible stored in R2, and up to two approved canonical
 references. Gemini Style QA scores line weight, facial vocabulary, detail

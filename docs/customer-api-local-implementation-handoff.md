@@ -199,8 +199,9 @@ Use `pnpm --filter pipeline-cloudflare dev`, then run
 `pnpm --filter pipeline-cloudflare smoke:local`. Both use explicit local D1/R2
 state and the `mock` provider. The smoke creates a session internally and tests
 books → upload → photo order → mock generation/QA → private artifact read →
-prototype editions, then writes the timestamped video and provenance reports.
-Follow-up coverage should add mock checkout, reviewer
+explicit human review + reversible page-slot inclusion → printable US Letter PDF
+export → prototype editions, then writes the PDF, timestamped video, and
+provenance reports. Follow-up coverage should add mock checkout, reviewer
 repair in the HTTP smoke, and explicit HTTP rejection checks for missing or
 cross-owner credentials.
 

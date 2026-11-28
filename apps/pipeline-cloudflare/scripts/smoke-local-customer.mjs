@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { PDFDocument, PageSizes } from "pdf-lib";
 
 const appDir = fileURLToPath(new URL("..", import.meta.url));
 const persistDir = "../../tmp/cloudflare-spike/state";
@@ -51,16 +52,20 @@ wrangler([
   sql,
 ]);
 
-const request = async (method, path, { body, bytes, idempotencyKey } = {}) => {
+const rawRequest = (method, path, { body, bytes, idempotencyKey } = {}) => {
   const headers = { Authorization: `Bearer ${token}` };
   if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (bytes) headers["Content-Type"] = "image/png";
-  const response = await fetch(new URL(path, baseUrl), {
+  return fetch(new URL(path, baseUrl), {
     method,
     headers,
     body: body === undefined ? bytes : JSON.stringify(body),
   });
+};
+
+const request = async (method, path, options = {}) => {
+  const response = await rawRequest(method, path, options);
   if (!response.ok) {
     const details = await response.text();
     throw new Error(
@@ -73,7 +78,7 @@ const request = async (method, path, { body, bytes, idempotencyKey } = {}) => {
 };
 
 const book = await request("POST", "/v1/books", {
-  body: {},
+  body: { title: "Synthetic Smoke Book", childName: "Maya" },
   idempotencyKey: `smoke-create-book-${randomUUID()}`,
 });
 const bookId = book.bookId;
@@ -115,22 +120,29 @@ while (Date.now() < deadline) {
   detail = await request("GET", `/v1/books/${bookId}/runs/${run.runId}`);
   status = detail.run?.status ?? detail.status;
   if (["completed", "partially_completed", "failed"].includes(status)) break;
-  await new Promise(resolve => setTimeout(resolve, 750));
+  await new Promise(resolvePromise => setTimeout(resolvePromise, 750));
 }
 if (status !== "completed") {
   throw new Error(
     `Local run did not complete successfully (status: ${status ?? "unknown"})`
   );
 }
+if (!detail.printablePdfEnabled) {
+  throw new Error(
+    "Local customer run must report printablePdfEnabled: true in local mode"
+  );
+}
 
 const artifact = detail.artifacts?.find(
-  item => item.artifact_kind === "candidate_clean"
+  item => (item.artifactKind ?? item.artifact_kind) === "candidate_clean"
 );
-if (!artifact)
+const artifactId = artifact?.artifactId ?? artifact?.artifact_id;
+if (!artifactId) {
   throw new Error("Completed run has no cleaned candidate artifact");
+}
 const artifactAccess = await request(
   "GET",
-  `/v1/artifacts/${encodeURIComponent(artifact.artifact_id)}/access`
+  `/v1/artifacts/${encodeURIComponent(artifactId)}/access`
 );
 const artifactResponse = await fetch(
   new URL(artifactAccess.access.url, baseUrl),
@@ -142,6 +154,101 @@ const artifactBytes = await artifactResponse.arrayBuffer();
 if (!artifactResponse.ok || artifactBytes.byteLength === 0) {
   throw new Error(`Local artifact read failed with ${artifactResponse.status}`);
 }
+
+// Printable PDF must reject auto-approved pages before explicit human review.
+const pdfPath = `/v1/books/${bookId}/runs/${run.runId}/printable-pdf`;
+const unreviewedPdf = await rawRequest("GET", pdfPath);
+if (unreviewedPdf.status !== 409) {
+  throw new Error(
+    `Expected 409 printable_pdf_not_ready before human review, got ${unreviewedPdf.status}`
+  );
+}
+
+const pages = detail.pages ?? [];
+if (pages.length !== 5) {
+  throw new Error(`Expected 5 pages in completed run, got ${pages.length}`);
+}
+const [excludedPage, ...includedPages] = pages.slice().reverse();
+
+// Exclude one page slot and human-approve the remaining 4 pages.
+await request(
+  "PATCH",
+  `/v1/books/${bookId}/runs/${run.runId}/pages/${excludedPage.pageId}/inclusion`,
+  {
+    body: { included: false },
+    idempotencyKey: `smoke-exclude-page-${randomUUID()}`,
+  }
+);
+for (const page of includedPages) {
+  const candidateId =
+    page.approvedCandidateId ?? page.candidates?.[0]?.candidateId;
+  if (!candidateId) {
+    throw new Error(`Page ${page.pageId} has no candidate to approve`);
+  }
+  await request("POST", `/v1/books/${bookId}/pages/${page.pageId}/reviews`, {
+    body: { candidateId, decision: "approved" },
+    idempotencyKey: `smoke-approve-page-${page.pageId}-${randomUUID()}`,
+  });
+}
+
+const fourPagePdfRes = await request("GET", pdfPath);
+const fourPagePdfBytes = new Uint8Array(await fourPagePdfRes.arrayBuffer());
+const fourPagePdf = await PDFDocument.load(fourPagePdfBytes);
+if (fourPagePdf.getPageCount() !== 4) {
+  throw new Error(
+    `Expected 4 PDF sheets with one slot excluded, got ${fourPagePdf.getPageCount()}`
+  );
+}
+
+// Restore the excluded page, human-approve it, and confirm on-demand PDF updates to 5 US Letter sheets.
+await request(
+  "PATCH",
+  `/v1/books/${bookId}/runs/${run.runId}/pages/${excludedPage.pageId}/inclusion`,
+  {
+    body: { included: true },
+    idempotencyKey: `smoke-restore-page-${randomUUID()}`,
+  }
+);
+await request(
+  "POST",
+  `/v1/books/${bookId}/pages/${excludedPage.pageId}/reviews`,
+  {
+    body: {
+      candidateId:
+        excludedPage.approvedCandidateId ??
+        excludedPage.candidates?.[0]?.candidateId,
+      decision: "approved",
+    },
+    idempotencyKey: `smoke-approve-restored-${randomUUID()}`,
+  }
+);
+
+const finalPdfRes = await request("GET", pdfPath);
+const finalPdfContentType = finalPdfRes.headers.get("content-type") ?? "";
+if (!finalPdfContentType.includes("application/pdf")) {
+  throw new Error(
+    `Expected application/pdf content-type, got ${finalPdfContentType}`
+  );
+}
+const finalPdfBytes = new Uint8Array(await finalPdfRes.arrayBuffer());
+const finalPdf = await PDFDocument.load(finalPdfBytes);
+if (finalPdf.getPageCount() !== 5) {
+  throw new Error(
+    `Expected 5 PDF sheets after restoring slot, got ${finalPdf.getPageCount()}`
+  );
+}
+for (const sheet of finalPdf.getPages()) {
+  const { width, height } = sheet.getSize();
+  if (
+    Math.abs(width - PageSizes.Letter[0]) > 0.01 ||
+    Math.abs(height - PageSizes.Letter[1]) > 0.01
+  ) {
+    throw new Error(
+      `Expected US Letter sheet (${PageSizes.Letter[0]}x${PageSizes.Letter[1]}), got ${width}x${height}`
+    );
+  }
+}
+
 const editions = await request("GET", "/v1/catalog/editions");
 if (
   editions.editions.length === 0 ||
@@ -152,18 +259,29 @@ if (
   );
 }
 
-const evidence = await writeSmokeEvidence({
-  bookId,
-  runId: run.runId,
-  status,
-  pageCount: detail.pages?.length ?? 0,
-  artifactRead: "passed",
-  editionCatalog: "prototype-only",
-  provider: "mock",
-  dataSource: "synthetic placeholder photo bytes",
-  bindings: ["local Worker", "local D1", "local R2", "local Workflow"],
-  externalServices: [],
-});
+const evidence = await writeSmokeEvidence(
+  {
+    bookId,
+    runId: run.runId,
+    status,
+    pageCount: pages.length,
+    artifactRead: "passed",
+    printablePdf: {
+      status: "passed",
+      unreviewedGateStatus: 409,
+      sheetsWithExcludedSlot: 4,
+      sheetsAfterRestore: 5,
+      pageSizePt: PageSizes.Letter,
+      byteSize: finalPdfBytes.byteLength,
+    },
+    editionCatalog: "prototype-only",
+    provider: "mock",
+    dataSource: "synthetic placeholder photo bytes",
+    bindings: ["local Worker", "local D1", "local R2", "local Workflow"],
+    externalServices: [],
+  },
+  finalPdfBytes
+);
 
 console.log(
   JSON.stringify(
@@ -172,8 +290,10 @@ console.log(
       bookId,
       runId: run.runId,
       status,
-      pageCount: detail.pages?.length ?? null,
+      pageCount: pages.length,
       artifactRead: "passed",
+      printablePdf:
+        "passed (4 sheets with excluded slot, 5 US Letter sheets after restore)",
       editionCatalog: "prototype-only",
       provider: "mock",
       dataSource: "synthetic placeholder photo bytes",
@@ -185,12 +305,14 @@ console.log(
   )
 );
 
-async function writeSmokeEvidence(result) {
+async function writeSmokeEvidence(result, pdfBytes) {
   const runTime = new Date().toISOString();
   const timestamp = runTime.replace(/[:.]/g, "-");
   const outputDir = resolve(appDir, "../../artifacts/smoke", timestamp);
   await mkdir(outputDir, { recursive: true });
-  const report = { ...result, generatedAt: runTime };
+  const pdfOutputPath = join(outputDir, "pictobook.pdf");
+  await writeFile(pdfOutputPath, pdfBytes);
+  const report = { ...result, pdfPath: pdfOutputPath, generatedAt: runTime };
   await writeFile(
     join(outputDir, "report.json"),
     `${JSON.stringify(report, null, 2)}\n`
@@ -199,7 +321,7 @@ async function writeSmokeEvidence(result) {
   const slides = [
     {
       title: "Local customer pipeline smoke",
-      subtitle: "PASS · 5 pages completed",
+      subtitle: "PASS · 5 pages completed & exported",
       lines: [
         "DATA: synthetic placeholder images, not customer photos",
         "IMAGE PROVIDER: mock / deterministic output",
@@ -234,20 +356,20 @@ async function writeSmokeEvidence(result) {
       ],
     },
     {
-      title: "4. Read private artifact and catalog",
+      title: "4. Review, inclusion & printable PDF",
+      subtitle: "US Letter PDF verified (4 -> 5 sheets)",
+      lines: [
+        "Unreviewed export blocked with 409 printable_pdf_not_ready",
+        "Slot removal exported 4 sheets; restore + approval exported 5 sheets",
+        "US Letter (612x792 pt) PDF saved to smoke artifacts",
+      ],
+    },
+    {
+      title: "5. Private artifact & catalog",
       subtitle: "Owner checks passed",
       lines: [
         "Candidate artifact retrieved through owner-authorized Worker access",
         "Edition catalog endpoint returned prototype entries",
-        "Sample editions are unavailable with zero illustrative prices",
-      ],
-    },
-    {
-      title: "Verification: passed",
-      subtitle: "This run contains fake test data",
-      lines: [
-        "Provider: mock · Data: synthetic placeholders",
-        "Storage and Workflow: local D1 / R2 / Workflow",
         "No live customer photos, remote Cloudflare, AI, payment, or fulfillment",
       ],
     },
@@ -261,6 +383,7 @@ async function writeSmokeEvidence(result) {
   ) {
     return {
       directory: outputDir,
+      pdf: pdfOutputPath,
       video: null,
       note: "Install sips and ffmpeg to render the video on this machine.",
     };
@@ -311,6 +434,7 @@ async function writeSmokeEvidence(result) {
       throw new Error(`ffmpeg video encoding failed: ${encoded.stderr}`);
     return {
       directory: outputDir,
+      pdf: pdfOutputPath,
       video: videoPath,
       durationSeconds: slides.length * 3,
     };
@@ -356,5 +480,5 @@ function evidenceHtml(report, slides) {
         `<li><strong>${slide.title}</strong><span>${slide.subtitle}</span></li>`
     )
     .join("");
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pictobook local smoke evidence</title><style>body{font:16px/1.5 system-ui,sans-serif;background:#f5f3ed;color:#1d302b;max-width:900px;margin:48px auto;padding:0 24px}header{background:#e4efe9;border-radius:20px;padding:24px}h1{margin:0 0 8px}strong,b{color:#245943}li{display:flex;justify-content:space-between;gap:20px;padding:14px 0;border-bottom:1px solid #d8ddd5}code{overflow-wrap:anywhere}.badge{display:inline-block;background:#2a745c;color:white;border-radius:20px;padding:4px 12px;font-weight:700}</style><header><span class="badge">PASSED · LOCAL MOCK</span><h1>Customer API smoke test</h1><p><strong>Data:</strong> synthetic placeholder image bytes, not customer photos<br><strong>Provider:</strong> mock<br><strong>Bindings:</strong> local Worker, D1, R2, Workflow</p><p><strong>External services:</strong> none</p></header><h2>Recorded steps</h2><ol>${rows}</ol><h2>Run result</h2><p>${report.pageCount} pages completed. Private artifact access and the prototype edition catalog both passed.</p><p><strong>Run ID:</strong> <code>${report.runId}</code></p><p><strong>Book ID:</strong> <code>${report.bookId}</code></p><p>Generated ${report.generatedAt}. This evidence uses fake test data and a deterministic mock provider.</p></html>`;
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pictobook local smoke evidence</title><style>body{font:16px/1.5 system-ui,sans-serif;background:#f5f3ed;color:#1d302b;max-width:900px;margin:48px auto;padding:0 24px}header{background:#e4efe9;border-radius:20px;padding:24px}h1{margin:0 0 8px}strong,b{color:#245943}li{display:flex;justify-content:space-between;gap:20px;padding:14px 0;border-bottom:1px solid #d8ddd5}code{overflow-wrap:anywhere}.badge{display:inline-block;background:#2a745c;color:white;border-radius:20px;padding:4px 12px;font-weight:700}</style><header><span class="badge">PASSED · LOCAL MOCK</span><h1>Customer API smoke test</h1><p><strong>Data:</strong> synthetic placeholder image bytes, not customer photos<br><strong>Provider:</strong> mock<br><strong>Bindings:</strong> local Worker, D1, R2, Workflow</p><p><strong>External services:</strong> none</p></header><h2>Recorded steps</h2><ol>${rows}</ol><h2>Run result</h2><p>${report.pageCount} pages completed. Human review, reversible page inclusion, printable US Letter PDF export, private artifact access, and the prototype edition catalog all passed.</p><p><strong>Run ID:</strong> <code>${report.runId}</code></p><p><strong>Book ID:</strong> <code>${report.bookId}</code></p><p><strong>PDF:</strong> <code>${report.pdfPath}</code></p><p>Generated ${report.generatedAt}. This evidence uses fake test data and a deterministic mock provider.</p></html>`;
 }
