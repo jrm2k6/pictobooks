@@ -373,9 +373,13 @@ export class ProductionBookRun {
     const source = await this.artifacts.read(photo.source_artifact_id);
     const bytes = await source.object.arrayBuffer();
 
+    const intakeModel =
+      run.style_judge_model && run.style_judge_model !== "mock-style-v1"
+        ? run.style_judge_model
+        : "gemini-3.8-flash";
     const analysis = await analyzeGeminiPhotoIntake({
       apiKey: this.providerConfig.apiKey,
-      model: run.model,
+      model: intakeModel,
       photo: { mimeType: source.record.mime_type, bytes },
     });
     const outcome = {

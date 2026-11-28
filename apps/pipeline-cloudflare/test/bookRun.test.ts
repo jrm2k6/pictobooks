@@ -93,6 +93,12 @@ class FakeImageProcessor implements ImageProcessor {
   }
 }
 
+class NormalizingFakeImageProcessor extends FakeImageProcessor {
+  normalize(input: ImageOperationInput): Promise<ImageArtifactResult> {
+    return this.cleanup(input);
+  }
+}
+
 describe("Durable Book Run workflow", () => {
   beforeEach(async () => {
     await reset();
@@ -255,7 +261,7 @@ describe("Durable Book Run workflow", () => {
 
     it("stops a page at intake_rejected when Gemini rejects the source photo and never starts generation", async () => {
       const { runId } = await createGeminiBookRun("intake-reject");
-      stubGeminiIntakeFetch({
+      const calls = stubGeminiIntakeFetch({
         status: "rejected",
         reasons: ["too_dark"],
         message: "This photo is too dark to use.",
@@ -271,6 +277,16 @@ describe("Durable Book Run workflow", () => {
       const result = await pipeline.run(runId, new ImmediateSteps());
 
       expect(result.status).toBe("partially_completed");
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.url).toContain(
+        "/models/gemini-3.8-flash:generateContent"
+      );
+      expect(calls[0]?.url).not.toContain("gemini-nano-banana-2.1");
+      expect(calls[0]?.body).toMatchObject({
+        generationConfig: {
+          responseMimeType: "application/json",
+        },
+      });
       expect(
         await scalar(
           "SELECT count(*) FROM pages WHERE state = 'intake_rejected' AND terminal_reason = 'too_dark'"
@@ -302,8 +318,10 @@ describe("Durable Book Run workflow", () => {
     });
 
     it("stops a page at intake_needs_review when Gemini flags the source photo as borderline", async () => {
-      const { runId } = await createGeminiBookRun("intake-review");
-      stubGeminiIntakeFetch({
+      const { runId } = await createGeminiBookRun("intake-review", {
+        visionModel: "gemini-4-hydrogen",
+      });
+      const calls = stubGeminiIntakeFetch({
         status: "needs_review",
         reasons: ["too_cluttered"],
         message: "This photo has a lot going on in the background.",
@@ -319,6 +337,10 @@ describe("Durable Book Run workflow", () => {
       const result = await pipeline.run(runId, new ImmediateSteps());
 
       expect(result.status).toBe("partially_completed");
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.url).toContain(
+        "/models/gemini-4-hydrogen:generateContent"
+      );
       expect(
         await scalar(
           "SELECT count(*) FROM pages WHERE state = 'intake_needs_review' AND terminal_reason = 'too_cluttered'"
@@ -332,22 +354,56 @@ describe("Durable Book Run workflow", () => {
       expect(await scalar("SELECT count(*) FROM candidates")).toBe(0);
     });
 
-    it("accepts the photo and proceeds to generation when Gemini accepts it", async () => {
+    it("accepts the photo using the vision model and proceeds to generation with the image model", async () => {
       const { runId } = await createGeminiBookRun("intake-accept");
-      stubGeminiIntakeFetch({ status: "accepted", reasons: [], message: "" });
+      const calls: Array<{ url: string }> = [];
+      vi.stubGlobal(
+        "fetch",
+        async (input: RequestInfo | URL): Promise<Response> => {
+          const url = String(input);
+          calls.push({ url });
+          if (url.includes("/models/gemini-3.8-flash:generateContent")) {
+            return new Response(
+              JSON.stringify({
+                candidates: [
+                  {
+                    content: {
+                      parts: [
+                        {
+                          text: JSON.stringify({
+                            status: "accepted",
+                            reasons: [],
+                            message: "Clear family photo.",
+                          }),
+                        },
+                      ],
+                    },
+                  },
+                ],
+              }),
+              { headers: { "content-type": "application/json" } }
+            );
+          }
+          return new Response("generation stub failure", { status: 500 });
+        }
+      );
       const pipeline = new ProductionBookRun(
         env.PIPELINE_DB,
         env.PIPELINE_ARTIFACTS,
-        new FakeImageProcessor(),
+        new NormalizingFakeImageProcessor(),
         () => "2026-11-10T12:00:00.000Z",
         { apiKey: "test-gemini-key" }
       );
-
-      // Generation itself requires a real Gemini image-generation response,
-      // which this test does not stub; it only asserts the page cleared the
-      // intake gate rather than asserting full completion.
       await expect(pipeline.run(runId, new ImmediateSteps())).rejects.toThrow();
 
+      expect(calls[0]?.url).toContain(
+        "/models/gemini-3.8-flash:generateContent"
+      );
+      expect(
+        calls.some(call =>
+          call.url.includes("/models/gemini-nano-banana-2.1:generateContent")
+        )
+      ).toBe(true);
       expect(
         await scalar(
           "SELECT count(*) FROM photos WHERE intake_status = 'accepted'"
@@ -357,10 +413,39 @@ describe("Durable Book Run workflow", () => {
         await scalar("SELECT count(*) FROM pages WHERE state = 'generating'")
       ).toBe(1);
     });
+
+    it("falls back to gemini-3.8-flash when a gemini run has the default mock style_judge_model", async () => {
+      const { runId } = await createGeminiBookRun("intake-fallback", {
+        visionModel: "mock-style-v1",
+      });
+      const calls = stubGeminiIntakeFetch({
+        status: "rejected",
+        reasons: ["too_blurry"],
+        message: "This photo is too blurry.",
+      });
+      const pipeline = new ProductionBookRun(
+        env.PIPELINE_DB,
+        env.PIPELINE_ARTIFACTS,
+        new FakeImageProcessor(),
+        () => "2026-11-10T12:00:00.000Z",
+        { apiKey: "test-gemini-key" }
+      );
+
+      const result = await pipeline.run(runId, new ImmediateSteps());
+
+      expect(result.status).toBe("partially_completed");
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.url).toContain(
+        "/models/gemini-3.8-flash:generateContent"
+      );
+    });
   });
 });
 
-const createGeminiBookRun = async (suffix: string) => {
+const createGeminiBookRun = async (
+  suffix: string,
+  options: { imageModel?: string; visionModel?: string } = {}
+) => {
   const bookId = `book-${suffix}-${crypto.randomUUID()}`;
   const runId = `run-${suffix}-${crypto.randomUUID()}`;
   const photoId = `photo-${suffix}`;
@@ -368,6 +453,8 @@ const createGeminiBookRun = async (suffix: string) => {
   const sourceArtifactId = `source:${photoId}`;
   const now = "2026-11-10T12:00:00.000Z";
   const stylePackVersion = "pictobook-preschool-v0.1";
+  const imageModel = options.imageModel ?? "gemini-nano-banana-2.1";
+  const visionModel = options.visionModel ?? "gemini-3.8-flash";
 
   await env.PIPELINE_DB.batch([
     env.PIPELINE_DB.prepare(
@@ -384,8 +471,8 @@ const createGeminiBookRun = async (suffix: string) => {
       `INSERT INTO book_run_execution_configs
        (run_id, provider, model, style_judge_model, execution_profile,
         candidate_cost_micros, style_judge_cost_micros, initial_candidate_count, created_at)
-       VALUES (?, 'gemini', 'gemini-test-model', 'gemini-test-model', 'mock_pass_initial', 1000, 500, 1, ?)`
-    ).bind(runId, now),
+       VALUES (?, 'gemini', ?, ?, 'mock_pass_initial', 1000, 500, 1, ?)`
+    ).bind(runId, imageModel, visionModel, now),
     env.PIPELINE_DB.prepare(
       `INSERT INTO photos (photo_id, run_id, ordinal, source_artifact_id, intake_status, created_at)
        VALUES (?, ?, 1, NULL, 'pending', ?)`
@@ -441,20 +528,31 @@ const stubGeminiIntakeFetch = (result: {
   reasons: string[];
   message: string;
 }) => {
-  vi.stubGlobal("fetch", async (): Promise<Response> => {
-    return new Response(
-      JSON.stringify({
-        candidates: [
-          {
-            content: {
-              parts: [{ text: JSON.stringify(result) }],
+  const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  vi.stubGlobal(
+    "fetch",
+    async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      calls.push({
+        url: String(input),
+        body: init?.body
+          ? (JSON.parse(String(init.body)) as Record<string, unknown>)
+          : {},
+      });
+      return new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: JSON.stringify(result) }],
+              },
             },
-          },
-        ],
-      }),
-      { headers: { "content-type": "application/json" } }
-    );
-  });
+          ],
+        }),
+        { headers: { "content-type": "application/json" } }
+      );
+    }
+  );
+  return calls;
 };
 
 const scalar = async (query: string): Promise<number> => {

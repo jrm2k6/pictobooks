@@ -39,10 +39,12 @@ limited to the alpha cohort.
 
 Before inviting families, validate photo intake with the real provider,
 exercise the complete download flow with synthetic fixtures, and print a
-representative PDF. In the Worker, intake currently asks Nano Banana 2.1 for
-JSON, while Google lists structured outputs as unsupported for that model.
-Pin a vision model for intake and verify accepted, rejected, and borderline
-photos. [Worker intake](../../../apps/pipeline-cloudflare/src/book-run/bookRun.ts) ·
+representative PDF. In the Worker, photo intake uses the configured vision
+model (`GEMINI_VISION_MODEL`, defaulting to `gemini-3.8-flash` via
+`style_judge_model`) with structured JSON output rather than Nano Banana 2.1,
+which Google lists as unsupported for structured outputs. Verify accepted,
+rejected, and borderline photos against the live vision model before launch.
+[Worker intake](../../../apps/pipeline-cloudflare/src/book-run/bookRun.ts) ·
 [Nano Banana 2.1 model card](https://aistudio.google.com/docs/models/gemini-nano-banana-2.1)
 
 ## Paid beta

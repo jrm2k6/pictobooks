@@ -1,4 +1,8 @@
-import { AuthenticationError, JwtAuthenticator } from "./auth.js";
+import {
+  AuthenticationError,
+  JwtAuthenticator,
+  SessionAuthenticator,
+} from "./auth.js";
 import {
   ApiProblem,
   MAX_PHOTOS_PER_RUN,
@@ -60,10 +64,13 @@ export const handleApiRequest = async (
   }
 
   try {
-    const principal = await new JwtAuthenticator(
-      env.CLERK_JWKS_URL
-    ).authenticate(request);
     const localCustomerApi = env.LOCAL_CUSTOMER_API === "true";
+    const authorization = request.headers.get("authorization") ?? "";
+    const isOpaqueLocalToken =
+      localCustomerApi && /^Bearer [A-Za-z0-9_-]{32,200}$/.test(authorization);
+    const principal = isOpaqueLocalToken
+      ? await new SessionAuthenticator(env.PIPELINE_DB).authenticate(request)
+      : await new JwtAuthenticator(env.CLERK_JWKS_URL).authenticate(request);
     const api = new PipelineApi(
       env.PIPELINE_DB,
       env.PIPELINE_ARTIFACTS,

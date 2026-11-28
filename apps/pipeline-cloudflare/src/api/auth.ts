@@ -33,6 +33,29 @@ const decodeBase64Url = (input: string): Uint8Array => {
   return Uint8Array.from(binary, c => c.charCodeAt(0));
 };
 
+export class SessionAuthenticator {
+  constructor(
+    private readonly database: D1Database,
+    private readonly now: () => string = () => new Date().toISOString()
+  ) {}
+
+  async authenticate(request: Request): Promise<Principal> {
+    const authorization = request.headers.get("authorization") ?? "";
+    const match = authorization.match(/^Bearer ([A-Za-z0-9_-]{32,200})$/);
+    if (!match) throw new AuthenticationError();
+    const tokenHash = await sha256Hex(match[1]!);
+    const session = await this.database
+      .prepare(
+        `SELECT session_id, user_id FROM api_sessions
+         WHERE token_sha256 = ? AND revoked_at IS NULL AND expires_at > ?`
+      )
+      .bind(tokenHash, this.now())
+      .first<{ session_id: string; user_id: string }>();
+    if (!session) throw new AuthenticationError();
+    return { userId: session.user_id, sessionId: session.session_id };
+  }
+}
+
 export class JwtAuthenticator {
   constructor(
     private readonly jwksUrl: string,
@@ -104,6 +127,7 @@ export class JwtAuthenticator {
   }
 
   private async findJwk(kid: string | undefined): Promise<JwkRecord> {
+    if (!this.jwksUrl) throw new AuthenticationError();
     if (!jwksCache.has(this.jwksUrl)) {
       const keys = await this.fetcher(this.jwksUrl);
       jwksCache.set(this.jwksUrl, keys);

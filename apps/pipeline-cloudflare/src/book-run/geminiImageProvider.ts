@@ -337,6 +337,25 @@ export const analyzeGeminiPhotoIntake = async (input: {
     generationConfig: {
       responseModalities: ["TEXT"],
       responseMimeType: "application/json",
+      responseSchema: {
+        type: "OBJECT",
+        properties: {
+          status: {
+            type: "STRING",
+            enum: ["accepted", "rejected", "needs_review"],
+          },
+          reasons: {
+            type: "ARRAY",
+            items: {
+              type: "STRING",
+              enum: Array.from(PHOTO_INTAKE_REASONS),
+            },
+          },
+          message: { type: "STRING" },
+        },
+        required: ["status", "reasons", "message"],
+      },
+      temperature: 0.1,
     },
   });
   const payload = JSON.parse(new TextDecoder().decode(response.body)) as {
