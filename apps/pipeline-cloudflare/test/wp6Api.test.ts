@@ -46,12 +46,17 @@ const encodeBase64Url = (data: unknown): string =>
 
 const signJwt = async (
   sub: string,
-  overrides: { exp?: number } = {}
+  overrides: { exp?: number; email?: string } = {}
 ): Promise<string> => {
   const exp = overrides.exp ?? Math.floor(Date.now() / 1000) + 3600;
   const jti = crypto.randomUUID();
   const headerB64 = encodeBase64Url({ alg: "RS256", kid: TEST_KID });
-  const payloadB64 = encodeBase64Url({ sub, exp, jti });
+  const payloadB64 = encodeBase64Url({
+    sub,
+    exp,
+    jti,
+    ...(overrides.email !== undefined ? { email: overrides.email } : {}),
+  });
   const sigInput = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
   const rawSig = await crypto.subtle.sign(
     "RSASSA-PKCS1-v1_5",
@@ -2015,6 +2020,66 @@ describe("WP6 authenticated pipeline API", () => {
       status: 403,
       code: "alpha_access_required",
     });
+  });
+
+  it("restricts API access to ALPHA_ALLOWED_EMAILS case-insensitively and fails closed without email claim", async () => {
+    const emailGatedEnv: RuntimeEnv = {
+      ...(env as unknown as RuntimeEnv),
+      ALPHA_ALLOWED_EMAILS: " Parent@Example.com , friend@example.org ",
+    };
+
+    const allowedByEmail = await handleApiRequest(
+      new Request("https://api.invalid/v1/books", {
+        headers: {
+          Authorization: `Bearer ${await signJwt(owner.userId, { email: "parent@example.COM" })}`,
+        },
+      }),
+      emailGatedEnv
+    );
+    expect(allowedByEmail?.status).toBe(200);
+
+    const wrongEmail = await handleApiRequest(
+      new Request("https://api.invalid/v1/books", {
+        headers: {
+          Authorization: `Bearer ${await signJwt(stranger.userId, { email: "other@example.com" })}`,
+        },
+      }),
+      emailGatedEnv
+    );
+    expect(wrongEmail?.status).toBe(403);
+    expect(await wrongEmail?.json()).toMatchObject({
+      status: 403,
+      code: "alpha_access_required",
+    });
+
+    const missingEmail = await handleApiRequest(
+      new Request("https://api.invalid/v1/books", {
+        headers: {
+          Authorization: `Bearer ${await signJwt(owner.userId)}`,
+        },
+      }),
+      emailGatedEnv
+    );
+    expect(missingEmail?.status).toBe(403);
+    expect(await missingEmail?.json()).toMatchObject({
+      status: 403,
+      code: "alpha_access_required",
+    });
+
+    // When both allowlists are configured, matching either grants access.
+    const combinedEnv: RuntimeEnv = {
+      ...emailGatedEnv,
+      ALPHA_ALLOWED_USER_IDS: stranger.userId,
+    };
+    const allowedByIdFallback = await handleApiRequest(
+      new Request("https://api.invalid/v1/books", {
+        headers: {
+          Authorization: `Bearer ${await signJwt(stranger.userId)}`,
+        },
+      }),
+      combinedEnv
+    );
+    expect(allowedByIdFallback?.status).toBe(200);
   });
 
   it("enables printable PDFs on hosted runtimes via PRINTABLE_PDF_ENABLED and respects optional ALPHA_ALLOWED_USER_IDS", async () => {

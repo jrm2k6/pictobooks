@@ -71,14 +71,16 @@ export const handleApiRequest = async (
     const principal = isOpaqueLocalToken
       ? await new SessionAuthenticator(env.PIPELINE_DB).authenticate(request)
       : await new JwtAuthenticator(env.CLERK_JWKS_URL).authenticate(request);
-    const alphaAllowedUserIds = parseUserIdAllowlist(
-      env.ALPHA_ALLOWED_USER_IDS
-    );
-    if (
-      alphaAllowedUserIds.size > 0 &&
-      !alphaAllowedUserIds.has(principal.userId)
-    ) {
-      throw new ApiProblem(403, "alpha_access_required");
+    const alphaAllowedUserIds = parseAllowlist(env.ALPHA_ALLOWED_USER_IDS);
+    const alphaAllowedEmails = parseEmailAllowlist(env.ALPHA_ALLOWED_EMAILS);
+    if (alphaAllowedUserIds.size > 0 || alphaAllowedEmails.size > 0) {
+      const allowedById = alphaAllowedUserIds.has(principal.userId);
+      const allowedByEmail =
+        principal.email !== undefined &&
+        alphaAllowedEmails.has(principal.email);
+      if (!allowedById && !allowedByEmail) {
+        throw new ApiProblem(403, "alpha_access_required");
+      }
     }
     const printablePdfEnabled = env.PRINTABLE_PDF_ENABLED === "true";
     const api = new PipelineApi(
@@ -544,6 +546,7 @@ type RuntimeSecrets = {
   MIN_PHOTOS_PER_RUN?: string;
   MAX_PHOTOS_PER_RUN?: string;
   ALPHA_ALLOWED_USER_IDS?: string;
+  ALPHA_ALLOWED_EMAILS?: string;
   MAX_BOOKS_PER_USER?: string;
 };
 
@@ -555,10 +558,18 @@ const parsePositiveInteger = (value: string | undefined): number | null => {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 };
 
-const parseUserIdAllowlist = (value: string | undefined): Set<string> =>
+const parseAllowlist = (value: string | undefined): Set<string> =>
   new Set(
     (value ?? "")
       .split(",")
       .map(entry => entry.trim())
+      .filter(entry => entry.length > 0)
+  );
+
+const parseEmailAllowlist = (value: string | undefined): Set<string> =>
+  new Set(
+    (value ?? "")
+      .split(",")
+      .map(entry => entry.trim().toLowerCase())
       .filter(entry => entry.length > 0)
   );

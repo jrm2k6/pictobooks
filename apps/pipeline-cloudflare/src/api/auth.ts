@@ -1,4 +1,4 @@
-export type Principal = { userId: string; sessionId: string };
+export type Principal = { userId: string; sessionId: string; email?: string };
 
 export class AuthenticationError extends Error {
   constructor() {
@@ -77,7 +77,7 @@ export class JwtAuthenticator {
     ];
 
     let header: { alg?: string; kid?: string };
-    let payload: { sub?: string; exp?: number; jti?: string };
+    let payload: { sub?: string; exp?: number; jti?: string; email?: unknown };
     try {
       header = JSON.parse(
         new TextDecoder().decode(decodeBase64Url(headerB64))
@@ -120,9 +120,15 @@ export class JwtAuthenticator {
     }
     if (!payload.sub) throw new AuthenticationError();
 
+    const email =
+      typeof payload.email === "string" && payload.email.trim().length > 0
+        ? payload.email.trim().toLowerCase()
+        : undefined;
+
     return {
       userId: payload.sub,
       sessionId: payload.jti ?? crypto.randomUUID(),
+      ...(email ? { email } : {}),
     };
   }
 

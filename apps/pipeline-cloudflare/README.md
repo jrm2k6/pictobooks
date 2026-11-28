@@ -86,7 +86,8 @@ CLERK_JWKS_URL=https://clerk.pictobook.app/.well-known/jwks.json
 
 Optional cohort and quota guardrails:
 
-- Invite-only alpha access is primarily enforced in Clerk (Restricted sign-up mode / Invitations). `ALPHA_ALLOWED_USER_IDS` is an optional comma-separated Clerk user ID allowlist (stored as a Wrangler secret) if you also want a Worker-level lock (`403 alpha_access_required`).
+- `ALPHA_ALLOWED_EMAILS`: comma-separated email addresses allowed to access `/v1/*` (case-insensitive, stored as a Wrangler secret). Works on Clerk's free Hobby plan by adding `{"email": "{{user.primary_email_address}}"}` under **Sessions → Customize session token** in Clerk Dashboard. Non-allowlisted users (or JWTs without an `email` claim) receive `403 alpha_access_required`.
+- `ALPHA_ALLOWED_USER_IDS`: optional comma-separated Clerk user IDs (`sub`) allowed to access `/v1/*` (stored as a Wrangler secret); if both email and user-ID allowlists are set, matching either grants access.
 - `MAX_BOOKS_PER_USER`: optional positive integer capping active (non-`cancelled`) books per owner (`403 book_limit_reached`) and surfaced via `GET /v1/pipeline-config`.
 
 The preview smoke script creates a Book and Run, uploads directly through a
