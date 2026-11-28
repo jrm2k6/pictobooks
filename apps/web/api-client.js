@@ -126,6 +126,9 @@ export function useApiClient() {
   }
 
   return {
+    /** GET /v1/pipeline-config → { minPhotosPerRun, maxPhotosPerRun, maxBooksPerUser } */
+    getPipelineConfig: () => request("GET", "/v1/pipeline-config"),
+
     /** GET /v1/books → { books: BookSummary[] } */
     listBooks: () => request("GET", "/v1/books"),
 

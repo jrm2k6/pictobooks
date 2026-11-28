@@ -84,6 +84,11 @@ Set the JWKS URL in `.dev.vars` for local development (copy `.dev.vars.example`)
 CLERK_JWKS_URL=https://clerk.pictobook.app/.well-known/jwks.json
 ```
 
+Optional cohort and quota guardrails:
+
+- Invite-only alpha access is primarily enforced in Clerk (Restricted sign-up mode / Invitations). `ALPHA_ALLOWED_USER_IDS` is an optional comma-separated Clerk user ID allowlist (stored as a Wrangler secret) if you also want a Worker-level lock (`403 alpha_access_required`).
+- `MAX_BOOKS_PER_USER`: optional positive integer capping active (non-`cancelled`) books per owner (`403 book_limit_reached`) and surfaced via `GET /v1/pipeline-config`.
+
 The preview smoke script creates a Book and Run, uploads directly through a
 short-lived R2 URL, starts and reviews the Run, promotes a canonical reference,
 requests private Artifact access, and launches a versioned regeneration:

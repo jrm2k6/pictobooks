@@ -102,3 +102,44 @@ describe("uploadPhoto", () => {
     ).rejects.toBeInstanceOf(UnauthorizedError);
   });
 });
+
+describe("getPipelineConfig", () => {
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubEnv("VITE_API_BASE_URL", undefined);
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockReset();
+    getToken.mockReset().mockResolvedValue("clerk-token");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("fetches GET /v1/pipeline-config with the Clerk Bearer token", async () => {
+    const { useApiClient } = await import("./api-client.js");
+    const payload = {
+      minPhotosPerRun: 5,
+      maxPhotosPerRun: 10,
+      maxBooksPerUser: 1,
+    };
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+
+    await expect(useApiClient().getPipelineConfig()).resolves.toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8787/v1/pipeline-config",
+      expect.objectContaining({
+        method: "GET",
+        headers: { Authorization: "Bearer clerk-token" },
+      })
+    );
+  });
+});

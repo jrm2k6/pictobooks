@@ -226,6 +226,19 @@
   margin: 0;
 }
 
+.limitNote {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  align-self: flex-start;
+  white-space: nowrap;
+}
+
 /* ── Book grid ────────────────────────────────────────────────────────── */
 .bookGrid {
   display: flex;
@@ -411,4 +424,33 @@
   border-radius: var(--radius-md);
   padding: 14px 20px;
   margin: 0;
+}
+
+.alphaNotice {
+  max-width: 520px;
+  margin: 48px auto;
+  padding: 32px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.alphaHeading {
+  font-family: var(--font-heading);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+  line-height: 1.25;
+}
+
+.alphaBody {
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--color-text-secondary);
+  margin: 0;
+  line-height: 1.6;
 }

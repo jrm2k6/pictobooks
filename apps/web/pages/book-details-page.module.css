@@ -116,6 +116,13 @@
   margin: 0;
 }
 
+.errorLink {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
 /* ── Footer ──────────────────────────────────────────────────────────── */
 
 .footer {

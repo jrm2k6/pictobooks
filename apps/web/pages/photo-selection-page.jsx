@@ -2,13 +2,13 @@ import React, { useState, useCallback } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { WizardShell } from "./wizard-shell.jsx";
 import { useCreateBookRun } from "../hooks/use-create-book-run.js";
+import { usePipelineConfig } from "../hooks/use-pipeline-config.js";
 import { useApiClient } from "../api-client.js";
+import { formatApiError } from "../alpha-limits.js";
 import { sha256Hex } from "../sha256.js";
 import styles from "./photo-selection-page.module.css";
 
 const ACCEPTED_TYPES = "image/jpeg,image/png,image/webp";
-const MIN_PHOTOS = 5;
-const MAX_PHOTOS = 20;
 const MAX_BYTES = 26_214_400; // 25 MB per photo
 
 /**
@@ -22,6 +22,8 @@ export function PhotoSelectionPage() {
   const navigate = useNavigate();
   const api = useApiClient();
   const { mutateAsync: createBookRun } = useCreateBookRun();
+  const { minPhotosPerRun: minPhotos, maxPhotosPerRun: maxPhotos } =
+    usePipelineConfig();
 
   // Each photo: { file: File, preview: string, name: string }
   const [photos, setPhotos] = useState([]);
@@ -29,12 +31,12 @@ export function PhotoSelectionPage() {
   const [uploadError, setUploadError] = useState(null);
 
   const hasValidCount =
-    photos.length >= MIN_PHOTOS && photos.length <= MAX_PHOTOS;
+    photos.length >= minPhotos && photos.length <= maxPhotos;
 
   const handleFileChange = useCallback(
     e => {
       const selected = Array.from(e.currentTarget.files ?? []);
-      const availableSlots = Math.max(0, MAX_PHOTOS - photos.length);
+      const availableSlots = Math.max(0, maxPhotos - photos.length);
       const toAdd = selected
         .slice(0, availableSlots)
         .filter(f => f.size <= MAX_BYTES);
@@ -46,7 +48,7 @@ export function PhotoSelectionPage() {
       setPhotos(prev => [...prev, ...newPhotos]);
       e.currentTarget.value = "";
     },
-    [photos.length]
+    [photos.length, maxPhotos]
   );
 
   function removePhoto(index) {
@@ -111,7 +113,13 @@ export function PhotoSelectionPage() {
       navigate({ to: "/books/new/order", search: { bookId, runId } });
     } catch (err) {
       setUploadStatus("error");
-      setUploadError(err.message ?? "Upload failed. Please try again.");
+      setUploadError(
+        formatApiError(err, {
+          minPhotosPerRun: minPhotos,
+          maxPhotosPerRun: maxPhotos,
+          fallback: "Upload failed. Please try again.",
+        })
+      );
     }
   }
 
@@ -121,7 +129,9 @@ export function PhotoSelectionPage() {
     <WizardShell step={2}>
       <header className={styles.header}>
         <span className={styles.eyebrow}>Choose the moments</span>
-        <h1 className={styles.heading}>Pick 5–20 photos.</h1>
+        <h1 className={styles.heading}>
+          Pick {minPhotos}–{maxPhotos} photos.
+        </h1>
         <p className={styles.lead}>
           Choose clear photos of family, pets, and favourite places. Each photo
           becomes one page in the book.
@@ -144,7 +154,7 @@ export function PhotoSelectionPage() {
           accept={ACCEPTED_TYPES}
           multiple
           hidden
-          disabled={photos.length >= MAX_PHOTOS || isUploading}
+          disabled={photos.length >= maxPhotos || isUploading}
           onChange={handleFileChange}
         />
       </label>
@@ -180,7 +190,7 @@ export function PhotoSelectionPage() {
           <strong>
             {photos.length} photo{photos.length !== 1 ? "s" : ""} selected
           </strong>
-          {" · "}at least {MIN_PHOTOS}, up to {MAX_PHOTOS} photos
+          {" · "}at least {minPhotos}, up to {maxPhotos} photos
         </span>
         <span className={styles.privacy}>All photos stay private</span>
       </div>

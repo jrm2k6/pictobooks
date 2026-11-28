@@ -71,6 +71,16 @@ export const handleApiRequest = async (
     const principal = isOpaqueLocalToken
       ? await new SessionAuthenticator(env.PIPELINE_DB).authenticate(request)
       : await new JwtAuthenticator(env.CLERK_JWKS_URL).authenticate(request);
+    const alphaAllowedUserIds = parseUserIdAllowlist(
+      env.ALPHA_ALLOWED_USER_IDS
+    );
+    if (
+      alphaAllowedUserIds.size > 0 &&
+      !alphaAllowedUserIds.has(principal.userId)
+    ) {
+      throw new ApiProblem(403, "alpha_access_required");
+    }
+    const printablePdfEnabled = env.PRINTABLE_PDF_ENABLED === "true";
     const api = new PipelineApi(
       env.PIPELINE_DB,
       env.PIPELINE_ARTIFACTS,
@@ -106,7 +116,8 @@ export const handleApiRequest = async (
       localCustomerApi,
       parsePositiveInteger(env.MIN_PHOTOS_PER_RUN) ?? MIN_PHOTOS,
       parsePositiveInteger(env.MAX_PHOTOS_PER_RUN) ?? MAX_PHOTOS_PER_RUN,
-      env.PRINTABLE_PDF_ENABLED === "true"
+      printablePdfEnabled,
+      parsePositiveInteger(env.MAX_BOOKS_PER_USER)
     );
     const response = await route(request, url, principal, api);
     if (response instanceof Response) return addCors(response, cors);
@@ -532,6 +543,8 @@ type RuntimeSecrets = {
   PRINTABLE_PDF_ENABLED?: string;
   MIN_PHOTOS_PER_RUN?: string;
   MAX_PHOTOS_PER_RUN?: string;
+  ALPHA_ALLOWED_USER_IDS?: string;
+  MAX_BOOKS_PER_USER?: string;
 };
 
 export type RuntimeEnv = Env & RuntimeSecrets;
@@ -541,3 +554,11 @@ const parsePositiveInteger = (value: string | undefined): number | null => {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 };
+
+const parseUserIdAllowlist = (value: string | undefined): Set<string> =>
+  new Set(
+    (value ?? "")
+      .split(",")
+      .map(entry => entry.trim())
+      .filter(entry => entry.length > 0)
+  );
