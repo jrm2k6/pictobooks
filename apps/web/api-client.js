@@ -6,6 +6,32 @@
  */
 import { useAuth } from "@clerk/react";
 
+/**
+ * @typedef {object} LatestRunSummary
+ * @property {string} runId
+ * @property {"created" | "running" | "partially_completed" | "completed" | "failed" | "cancelled"} status
+ * @property {number} totalPageCount
+ * @property {number} includedPageCount
+ * @property {number} readyPageCount
+ * @property {number} humanApprovedPageCount
+ * @property {boolean} reviewComplete
+ * @property {boolean} uploadExpired
+ * @property {string} createdAt
+ * @property {string | null} completedAt
+ */
+
+/**
+ * @typedef {object} BookSummary
+ * @property {string} bookId
+ * @property {string | null} [title]
+ * @property {string | null} [childName]
+ * @property {number | null} [childAge]
+ * @property {string} [status]
+ * @property {string} [createdAt]
+ * @property {string} [updatedAt]
+ * @property {LatestRunSummary | null} [latestRun]
+ */
+
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8787";
 const UPLOAD_CONTENT_PATH =
   /^\/v1\/books\/[^/]+\/runs\/[^/]+\/upload-intents\/[^/]+\/content$/;

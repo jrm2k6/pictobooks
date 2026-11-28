@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "@tanstack/react-router";
 import { AppShell } from "./app-shell.jsx";
 import { useBooks } from "./hooks/use-books.js";
+import { hasSavedOrderPhotos, resolveBookDestination } from "./book-resume.js";
 import styles from "./books-page.module.css";
 
 /* ── Loading skeleton ─────────────────────────────────────────────────── */
@@ -74,16 +75,39 @@ function EmptyState() {
 }
 
 /* ── Book card ────────────────────────────────────────────────────────── */
-function BookCard({ book }) {
-  const statusLabel = {
-    draft: "Draft",
-    processing: "In progress",
-    review: "Ready to review",
-    completed: "Complete",
-    cancelled: "Cancelled",
-  };
+function formatRunProgress(latestRun) {
+  if (!latestRun) return null;
+  const total = latestRun.includedPageCount ?? latestRun.totalPageCount;
+  if (total == null) return null;
 
-  const isProcessing = book.status === "processing";
+  const pageWord = total === 1 ? "page" : "pages";
+
+  if (latestRun.status === "created") {
+    if (total === 0) return null;
+    const photoWord = total === 1 ? "photo" : "photos";
+    return `${total} ${photoWord} selected`;
+  }
+
+  if (
+    latestRun.status === "completed" ||
+    latestRun.status === "partially_completed"
+  ) {
+    const approved = latestRun.humanApprovedPageCount ?? 0;
+    if (latestRun.reviewComplete || approved > 0) {
+      return `${approved} of ${total} ${pageWord} approved`;
+    }
+    return `${latestRun.readyPageCount ?? 0} of ${total} ${pageWord} ready to review`;
+  }
+
+  return `${latestRun.readyPageCount ?? 0} of ${total} ${pageWord} ready`;
+}
+
+function BookCard({ book }) {
+  const dest = resolveBookDestination(book, {
+    hasSavedOrder: hasSavedOrderPhotos(book.latestRun?.runId),
+  });
+  const isProcessing = book.latestRun?.status === "running";
+  const progressCopy = formatRunProgress(book.latestRun);
 
   return (
     <article className={styles.bookCard}>
@@ -118,16 +142,13 @@ function BookCard({ book }) {
 
       <div className={styles.bookCardBody}>
         <div className={styles.bookCardMeta}>
-          {isProcessing && (
+          {isProcessing ? (
             <span className={styles.activePill}>
               <span className={styles.activeDot} aria-hidden="true" />
-              {statusLabel[book.status]}
+              {dest.statusLabel}
             </span>
-          )}
-          {!isProcessing && (
-            <span className={styles.statusLabel}>
-              {statusLabel[book.status] ?? book.status}
-            </span>
+          ) : (
+            <span className={styles.statusLabel}>{dest.statusLabel}</span>
           )}
         </div>
         <h2 className={styles.bookCardTitle}>
@@ -140,17 +161,12 @@ function BookCard({ book }) {
             {book.childAge ? ` · Age ${book.childAge}` : ""}
           </p>
         )}
-        {book.latestRun && (
-          <p className={styles.bookCardSub}>
-            {book.latestRun.readyPageCount ?? 0} of{" "}
-            {book.latestRun.totalPageCount ?? "?"} pages ready
-          </p>
-        )}
+        {progressCopy && <p className={styles.bookCardSub}>{progressCopy}</p>}
       </div>
 
       <div className={styles.bookCardActions}>
-        <Link to={`/books/${book.bookId}`} className={styles.openBtn}>
-          Open →
+        <Link to={dest.to} search={dest.search} className={styles.openBtn}>
+          {dest.actionLabel}
         </Link>
       </div>
     </article>

@@ -31,6 +31,19 @@ export const MAX_PHOTOS_PER_RUN = 10;
 
 export type ApiResponse = { status: number; body: Record<string, unknown> };
 
+export type LatestRunSummary = {
+  runId: string;
+  status: string;
+  totalPageCount: number;
+  includedPageCount: number;
+  readyPageCount: number;
+  humanApprovedPageCount: number;
+  reviewComplete: boolean;
+  uploadExpired: boolean;
+  createdAt: string;
+  completedAt: string | null;
+};
+
 export type BookRunLauncher = { start(runId: string): Promise<void> };
 export type GenerationProviderConfig = {
   provider: "mock" | "gemini";
@@ -206,24 +219,120 @@ export class PipelineApi {
   }
 
   async listBooks(principal: Principal): Promise<ApiResponse> {
-    const result = await this.database
-      .prepare(
-        `SELECT b.book_id, b.status, b.title, b.child_name, b.child_age,
-                b.created_at, b.updated_at,
-                (SELECT count(*) FROM book_runs r WHERE r.book_id = b.book_id) AS run_count
-         FROM books b WHERE b.owner_id = ? ORDER BY b.updated_at DESC LIMIT 100`
-      )
-      .bind(principal.userId)
-      .all<{
-        book_id: string;
-        status: string;
-        title: string | null;
-        child_name: string | null;
-        child_age: number | null;
-        created_at: string;
-        updated_at: string;
-        run_count: number;
-      }>();
+    const nowIso = this.isoNow();
+    const [result, lineageResult] = await Promise.all([
+      this.database
+        .prepare(
+          `SELECT b.book_id, b.status, b.title, b.child_name, b.child_age,
+                  b.created_at, b.updated_at,
+                  (SELECT count(*) FROM book_runs r WHERE r.book_id = b.book_id) AS run_count
+           FROM books b WHERE b.owner_id = ? ORDER BY b.updated_at DESC LIMIT 100`
+        )
+        .bind(principal.userId)
+        .all<{
+          book_id: string;
+          status: string;
+          title: string | null;
+          child_name: string | null;
+          child_age: number | null;
+          created_at: string;
+          updated_at: string;
+          run_count: number;
+        }>(),
+      this.database
+        .prepare(
+          `WITH owner_books AS (
+             SELECT book_id
+             FROM books
+             WHERE owner_id = ?1
+             ORDER BY updated_at DESC
+             LIMIT 100
+           ),
+           ranked_primary_runs AS (
+             SELECT r.run_id,
+                    r.book_id,
+                    r.status,
+                    r.created_at,
+                    r.completed_at,
+                    r.rowid AS run_order,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY r.book_id
+                      ORDER BY r.created_at DESC, r.rowid DESC
+                    ) AS rn
+             FROM book_runs r
+             WHERE r.book_id IN (SELECT book_id FROM owner_books)
+               AND NOT EXISTS (
+                 SELECT 1 FROM book_run_regenerations l WHERE l.new_run_id = r.run_id
+               )
+           ),
+           latest_primary_runs AS (
+             SELECT run_id, book_id, status, created_at, completed_at, run_order
+             FROM ranked_primary_runs
+             WHERE rn = 1
+           ),
+           eligible_runs AS (
+             SELECT lp.run_id,
+                    lp.book_id,
+                    lp.status,
+                    lp.created_at,
+                    lp.completed_at,
+                    lp.run_order,
+                    NULL AS source_page_id,
+                    NULL AS source_run_id,
+                    1 AS is_primary,
+                    EXISTS (
+                      SELECT 1
+                      FROM upload_intents ui
+                      JOIN photos up ON up.photo_id = ui.photo_id
+                      WHERE ui.run_id = lp.run_id
+                        AND up.source_artifact_id IS NULL
+                        AND ui.expires_at <= ?2
+                    ) AS upload_expired
+             FROM latest_primary_runs lp
+             UNION ALL
+             SELECT r.run_id,
+                    r.book_id,
+                    r.status,
+                    r.created_at,
+                    r.completed_at,
+                    r.rowid AS run_order,
+                    l.source_page_id,
+                    l.source_run_id,
+                    0 AS is_primary,
+                    0 AS upload_expired
+             FROM book_runs r
+             JOIN latest_primary_runs lp ON lp.book_id = r.book_id
+             JOIN book_run_regenerations l ON l.new_run_id = r.run_id
+             WHERE NOT EXISTS (
+               SELECT 1
+               FROM upload_intents ui
+               JOIN photos up ON up.photo_id = ui.photo_id
+               WHERE ui.run_id = r.run_id
+                 AND up.source_artifact_id IS NULL
+                 AND ui.expires_at <= ?2
+             )
+           )
+           SELECT r.book_id,
+                  r.run_id,
+                  r.status,
+                  r.created_at,
+                  r.completed_at,
+                  r.is_primary,
+                  r.upload_expired,
+                  r.source_page_id,
+                  r.source_run_id,
+                  p.page_id,
+                  p.included,
+                  p.state,
+                  p.approval_source
+           FROM eligible_runs r
+           LEFT JOIN pages p ON p.run_id = r.run_id
+           ORDER BY r.created_at DESC, r.run_order ASC`
+        )
+        .bind(principal.userId, nowIso)
+        .all<BookLatestRunLineageRow>(),
+    ]);
+    const latestRunByBookId = buildLatestRunSummaries(lineageResult.results);
     const books = result.results.map(b => ({
       bookId: b.book_id,
       status: b.status,
@@ -233,6 +342,7 @@ export class PipelineApi {
       createdAt: b.created_at,
       updatedAt: b.updated_at,
       runCount: b.run_count,
+      latestRun: latestRunByBookId.get(b.book_id) ?? null,
     }));
     return { status: 200, body: { books } };
   }
@@ -2116,6 +2226,114 @@ const validateBookPersonalization = (input: {
   ) {
     throw new ApiProblem(400, "invalid_child_age");
   }
+};
+
+type BookLatestRunLineageRow = {
+  book_id: string;
+  run_id: string;
+  status: string;
+  created_at: string;
+  completed_at: string | null;
+  is_primary: number;
+  upload_expired: number;
+  source_page_id: string | null;
+  source_run_id: string | null;
+  page_id: string | null;
+  included: number | null;
+  state: string | null;
+  approval_source: string | null;
+};
+
+const buildLatestRunSummaries = (
+  rows: BookLatestRunLineageRow[]
+): Map<string, LatestRunSummary> => {
+  const primaryRunMeta = new Map<
+    string,
+    {
+      runId: string;
+      status: string;
+      createdAt: string;
+      completedAt: string | null;
+      uploadExpired: boolean;
+      slots: BookLatestRunLineageRow[];
+    }
+  >();
+  const latestByTarget = new Map<string, BookLatestRunLineageRow>();
+
+  for (const row of rows) {
+    if (row.is_primary === 1) {
+      let entry = primaryRunMeta.get(row.book_id);
+      if (!entry) {
+        entry = {
+          runId: row.run_id,
+          status: row.status,
+          createdAt: row.created_at,
+          completedAt: row.completed_at ?? null,
+          uploadExpired: row.upload_expired === 1,
+          slots: [],
+        };
+        primaryRunMeta.set(row.book_id, entry);
+      }
+      if (row.page_id !== null) {
+        entry.slots.push(row);
+      }
+    } else if (
+      row.page_id &&
+      row.source_page_id &&
+      !latestByTarget.has(row.source_page_id)
+    ) {
+      latestByTarget.set(row.source_page_id, row);
+    }
+  }
+
+  const summaries = new Map<string, LatestRunSummary>();
+  primaryRunMeta.forEach((entry, bookId) => {
+    const totalPageCount = entry.slots.length;
+    const includedSlots = entry.slots.filter(slot => slot.included === 1);
+    const includedPageCount = includedSlots.length;
+    let readyPageCount = 0;
+    let humanApprovedPageCount = 0;
+
+    for (const slot of includedSlots) {
+      const visited = new Set<string>();
+      let current = slot;
+      while (current.page_id) {
+        const next = latestByTarget.get(current.page_id);
+        if (!next) break;
+        if (
+          next.source_run_id !== current.run_id ||
+          visited.has(current.page_id)
+        ) {
+          break;
+        }
+        visited.add(current.page_id);
+        current = next;
+      }
+
+      if (current.state === "approved") {
+        readyPageCount += 1;
+        if (current.approval_source === "human") {
+          humanApprovedPageCount += 1;
+        }
+      }
+    }
+
+    summaries.set(bookId, {
+      runId: entry.runId,
+      status: entry.status,
+      totalPageCount,
+      includedPageCount,
+      readyPageCount,
+      humanApprovedPageCount,
+      reviewComplete:
+        includedPageCount > 0 && humanApprovedPageCount === includedPageCount,
+      uploadExpired: entry.uploadExpired,
+      createdAt: entry.createdAt,
+      completedAt: entry.completedAt,
+    });
+  });
+
+  return summaries;
 };
 
 export type { SignedArtifactRequest };
